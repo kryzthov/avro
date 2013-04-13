@@ -90,7 +90,7 @@ public abstract class Schema extends JsonProperties {
   /** The type of a schema. */
   public enum Type {
     RECORD, ENUM, ARRAY, MAP, UNION, FIXED, STRING, BYTES,
-      INT, LONG, FLOAT, DOUBLE, BOOLEAN, NULL;
+      INT, LONG, FLOAT, DOUBLE, BOOLEAN, NULL, EXTENSION;
     private String name;
     private Type() { this.name = this.name().toLowerCase(); }
     public String getName() { return name; }
@@ -171,6 +171,11 @@ public abstract class Schema extends JsonProperties {
   public static Schema createFixed(String name, String doc, String space,
       int size) {
     return new FixedSchema(new Name(name, space), doc, size);
+  }
+
+  /** Create an extension schema. */
+  public static Schema createExtension(Schema idSchema) {
+	return new ExtensionSchema(idSchema);
   }
 
   /** Return the type of this schema. */
@@ -882,6 +887,26 @@ public abstract class Schema extends JsonProperties {
   
   private static class NullSchema extends Schema {
     public NullSchema() { super(Type.NULL); }
+  }
+
+  // TODO: Make this private (ie. expose extensions directly through the Schema interface).
+  public static class ExtensionSchema extends Schema {
+    private final Schema idSchema;
+
+    /**
+     * Creates an extension schema.
+     *
+     * @param idSchema Avro Schema of the extension ID.
+     */
+    public ExtensionSchema(Schema idSchema) {
+      super(Type.EXTENSION);
+      this.idSchema = idSchema;
+    }
+
+    /** @return */
+    public Schema getIdSchema() {
+      return idSchema;
+    }
   }
 
   /** A parser for JSON-format schemas.  Each named schema parsed with a parser

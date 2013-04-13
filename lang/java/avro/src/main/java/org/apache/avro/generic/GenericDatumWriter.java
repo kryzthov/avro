@@ -17,23 +17,28 @@
  */
 package org.apache.avro.generic;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Collection;
 
 import org.apache.avro.AvroTypeException;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.ExtensionSchema;
 import org.apache.avro.Schema.Field;
+import org.apache.avro.SchemaResolver;
 import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Encoder;
+import org.apache.avro.io.EncoderFactory;
 
 /** {@link DatumWriter} for generic Java objects. */
 public class GenericDatumWriter<D> implements DatumWriter<D> {
   private final GenericData data;
   private Schema root;
+  private SchemaResolver<?> schemaResolver;
 
   public GenericDatumWriter() { this(GenericData.get()); }
 
@@ -53,6 +58,11 @@ public class GenericDatumWriter<D> implements DatumWriter<D> {
   public GenericData getData() { return data; }
 
   public void setSchema(Schema root) { this.root = root; }
+
+  public GenericDatumWriter<D> setSchemaResolver(SchemaResolver<?> schemaResolver) {
+    this.schemaResolver = schemaResolver;
+    return this;
+  }
 
   public void write(D datum, Encoder out) throws IOException {
     write(root, datum, out);
@@ -81,6 +91,23 @@ public class GenericDatumWriter<D> implements DatumWriter<D> {
       case DOUBLE:  out.writeDouble((Double)datum);   break;
       case BOOLEAN: out.writeBoolean((Boolean)datum); break;
       case NULL:    out.writeNull();                  break;
+      case EXTENSION: {
+        final ExtensionSchema extension = (ExtensionSchema) schema;
+        final Schema idSchema = extension.getIdSchema();
+        final GenericContainer container = (GenericContainer) datum;
+        final Object id = schemaResolver.getId(container.getSchema());
+        write(idSchema, id, out);
+
+        final ByteArrayOutputStream ostream = new ByteArrayOutputStream();
+        final Encoder encoder = EncoderFactory.get().binaryEncoder(ostream, null);
+        final GenericDatumWriter<D> writer = new GenericDatumWriter<D>();
+        writer.write(container.getSchema(), container, encoder);
+        encoder.flush();
+
+        writeBytes(ByteBuffer.wrap(ostream.toByteArray()), out);
+
+        break;
+      }
       default: error(schema,datum);
       }
     } catch (NullPointerException e) {

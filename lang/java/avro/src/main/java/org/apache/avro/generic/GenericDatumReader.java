@@ -18,17 +18,19 @@
 package org.apache.avro.generic;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Collection;
-import java.nio.ByteBuffer;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.ExtensionSchema;
 import org.apache.avro.Schema.Field;
+import org.apache.avro.SchemaResolver;
 import org.apache.avro.io.DatumReader;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
@@ -41,7 +43,10 @@ public class GenericDatumReader<D> implements DatumReader<D> {
   private final GenericData data;
   private Schema actual;
   private Schema expected;
-  
+
+  /** Schema resolver for record extensions. */
+  private SchemaResolver<Object> schemaResolver;
+
   private ResolvingDecoder creatorResolver = null;
   private final Thread creator;
 
@@ -92,6 +97,17 @@ public class GenericDatumReader<D> implements DatumReader<D> {
   public void setExpected(Schema reader) {
     this.expected = reader;
     creatorResolver = null;
+  }
+
+  /**
+   * Sets the schema resolver to decode extensions.
+   *
+   * @param schemaResolver Schema resolver to decode extensions.
+   * @return this generic datum reader.
+   */
+  public GenericDatumReader<D> setSchemaResolver(SchemaResolver schemaResolver) {
+    this.schemaResolver = schemaResolver;
+    return this;
   }
 
   private static final ThreadLocal<Map<Schema,Map<Schema,ResolvingDecoder>>>
@@ -162,6 +178,21 @@ public class GenericDatumReader<D> implements DatumReader<D> {
     case DOUBLE:  return in.readDouble();
     case BOOLEAN: return in.readBoolean();
     case NULL:    in.readNull(); return null;
+    case EXTENSION: {
+      final ExtensionSchema extension = (ExtensionSchema) expected;
+      final Schema idSchema = extension.getIdSchema();
+      final Object id = read(null, idSchema, in);
+      final Schema schema = schemaResolver.getSchema(id);
+      final ByteBuffer bytes = in.readBytes(null);
+      if (schema == null) {
+        // Read as bytes
+        return bytes;
+      } else {
+        final GenericDatumReader<Object> reader = new GenericDatumReader<Object>(schema);
+        final Decoder decoder =  DecoderFactory.get().binaryDecoder(bytes.array(), null);
+        return reader.read(null, decoder);
+      }
+    }
     default: throw new AvroRuntimeException("Unknown type: " + expected);
     }
   }

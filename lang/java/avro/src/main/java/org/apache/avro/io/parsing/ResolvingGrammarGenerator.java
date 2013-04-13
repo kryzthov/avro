@@ -25,8 +25,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.AvroTypeException;
 import org.apache.avro.Schema;
+import org.apache.avro.Schema.ExtensionSchema;
 import org.apache.avro.Schema.Field;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.io.EncoderFactory;
@@ -118,6 +120,17 @@ public class ResolvingGrammarGenerator extends ValidatingGrammarGenerator {
         return resolveRecords(writer, reader, seen);
       case UNION:
         return resolveUnion(writer, reader, seen);
+      case EXTENSION: {
+        if (!writer.equals(reader)) {
+          throw new AvroRuntimeException("Extension ID incompatible");
+        }
+        final ExtensionSchema extWriterSchema = (ExtensionSchema) writer;
+        final ExtensionSchema extReaderSchema = (ExtensionSchema) reader;
+        return Symbol.seq(
+            Symbol.BYTES,
+            generate(extWriterSchema.getIdSchema(), extReaderSchema.getIdSchema(), seen)
+        );
+      }
       default:
         throw new AvroTypeException("Unkown type for schema: " + writerType);
       }
@@ -167,6 +180,7 @@ public class ResolvingGrammarGenerator extends ValidatingGrammarGenerator {
       case ARRAY:
       case MAP:
       case RECORD:
+      case EXTENSION:
         break;
       default:
         throw new RuntimeException("Unexpected schema type: " + readerType);
