@@ -17,32 +17,36 @@
  */
 package org.apache.avro.generic;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Collection;
 import java.util.ArrayDeque;
-
-import static org.junit.Assert.*;
-
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
 
+import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Field;
-import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema.Type;
-import org.apache.avro.io.BinaryData;
-import org.apache.avro.io.BinaryEncoder;
-import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.generic.GenericData.Record;
+import org.apache.avro.io.BinaryData;
+import org.apache.avro.io.BinaryDecoder;
+import org.apache.avro.io.BinaryEncoder;
+import org.apache.avro.io.DecoderFactory;
+import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.util.Utf8;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.map.ObjectMapper;
-
 import org.junit.Test;
 
 public class TestGenericData {
@@ -388,5 +392,27 @@ public class TestGenericData {
     ByteBuffer buffer_copy = (ByteBuffer) copy.get(byte_field.name());
 
     assertEquals(buffer, buffer_copy);
+  }
+
+  @Test
+  public void testGenericUnion() throws Exception {
+    final List<Schema> types = new ArrayList<Schema>();
+    types.add(Schema.create(Schema.Type.NULL));
+    types.add(Schema.create(Schema.Type.INT));
+    final Schema unionSchema = Schema.createUnion(types);
+    unionSchema.addProp("java_name", "com.package.Foo");
+    System.out.println(unionSchema.toString(true));
+
+    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    final BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(bytes, null);
+    final GenericDatumWriter<Object> writer = new GenericDatumWriter<Object>(unionSchema);
+    writer.write(1, encoder);
+    encoder.flush();
+    final byte[] encoded = bytes.toByteArray();
+
+    final BinaryDecoder decoder = DecoderFactory.get().binaryDecoder(encoded, null);
+    final GenericDatumReader<?> reader = new GenericDatumReader<Object>(unionSchema);
+    final Object decoded = reader.read(null, decoder);
+    System.out.println(decoded);
   }
 }

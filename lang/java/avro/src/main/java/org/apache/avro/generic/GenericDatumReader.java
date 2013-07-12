@@ -152,7 +152,7 @@ public class GenericDatumReader<D> implements DatumReader<D> {
     case ENUM:    return readEnum(expected, in);
     case ARRAY:   return readArray(old, expected, in);
     case MAP:     return readMap(old, expected, in);
-    case UNION:   return read(old, expected.getTypes().get(in.readIndex()), in);
+    case UNION:   return readUnion(old, expected, in);
     case FIXED:   return readFixed(old, expected, in);
     case STRING:  return readString(old, expected, in);
     case BYTES:   return readBytes(old, expected, in);
@@ -165,7 +165,20 @@ public class GenericDatumReader<D> implements DatumReader<D> {
     default: throw new AvroRuntimeException("Unknown type: " + expected);
     }
   }
-  
+
+  /** Reads an instance of a union type. */
+  protected Object readUnion(Object old, Schema expected, ResolvingDecoder in)
+      throws IOException {
+    final int typeIndex = in.readIndex();
+    final Schema schema = expected.getTypes().get(typeIndex);
+    final Object value = read(old, schema, in);
+    if (expected.getProp("java_name") != null) {
+      return new GenericData.UnionValue(expected, typeIndex, value);
+    } else {
+      return value;
+    }
+  }
+
   /** Called to read a record instance. May be overridden for alternate record
    * representations.*/
   protected Object readRecord(Object old, Schema expected, 

@@ -792,13 +792,21 @@ public abstract class Schema extends JsonProperties {
         hash += type.computeHash();
       return hash;
     }
-    
-    @Override
-    public void addProp(String name, String value) {
-      throw new AvroRuntimeException("Can't set properties on a union: "+this);
-    }
-    
+
     void toJson(Names names, JsonGenerator gen) throws IOException {
+      if (props.size() == 0) {
+        // No properties, write the union types list naked:
+        toJsonTypeList(names, gen);
+      } else {
+        gen.writeStartObject();
+        gen.writeFieldName("type");
+        toJsonTypeList(names, gen);
+        writeProps(gen);
+        gen.writeEndObject();
+      }
+    }
+
+    private void toJsonTypeList(Names names, JsonGenerator gen) throws IOException {
       gen.writeStartArray();
       for (Schema type : types)
         type.toJson(names, gen);
@@ -1065,95 +1073,108 @@ public abstract class Schema extends JsonProperties {
         throw new SchemaParseException("Undefined name: "+schema);
       return result;
     } else if (schema.isObject()) {
+      final String savedSpace = names.space();
+
       Schema result;
-      String type = getRequiredText(schema, "type", "No type");
-      Name name = null;
-      String savedSpace = names.space();
-      String doc = null;
-      if (type.equals("record") || type.equals("error")
-          || type.equals("enum") || type.equals("fixed")) {
-        String space = getOptionalText(schema, "namespace");
-        doc = getOptionalText(schema, "doc");
-        if (space == null)
-          space = names.space();
-        name = new Name(getRequiredText(schema, "name", "No name in schema"),
-                        space);
-        if (name.space != null) {                 // set default namespace
-          names.space(name.space);
-        }
-      }
-      if (PRIMITIVES.containsKey(type)) {         // primitive
-        result = create(PRIMITIVES.get(type));
-      } else if (type.equals("record") || type.equals("error")) { // record
-        List<Field> fields = new ArrayList<Field>();
-        result = new RecordSchema(name, doc, type.equals("error"));
-        if (name != null) names.add(result);
-        JsonNode fieldsNode = schema.get("fields");
-        if (fieldsNode == null || !fieldsNode.isArray())
-          throw new SchemaParseException("Record has no fields: "+schema);
-        for (JsonNode field : fieldsNode) {
-          String fieldName = getRequiredText(field, "name", "No field name");
-          String fieldDoc = getOptionalText(field, "doc");
-          JsonNode fieldTypeNode = field.get("type");
-          if (fieldTypeNode == null)
-            throw new SchemaParseException("No field type: "+field);
-          if (fieldTypeNode.isTextual()
-              && names.get(fieldTypeNode.getTextValue()) == null)
-            throw new SchemaParseException
-              (fieldTypeNode+" is not a defined name."
-               +" The type of the \""+fieldName+"\" field must be"
-               +" a defined name or a {\"type\": ...} expression.");
-          Schema fieldSchema = parse(fieldTypeNode, names);
-          Field.Order order = Field.Order.ASCENDING;
-          JsonNode orderNode = field.get("order");
-          if (orderNode != null)
-            order = Field.Order.valueOf(orderNode.getTextValue().toUpperCase());
-          JsonNode defaultValue = field.get("default");
-          if (defaultValue != null
-              && (Type.FLOAT.equals(fieldSchema.getType())
-                  || Type.DOUBLE.equals(fieldSchema.getType()))
-              && defaultValue.isTextual())
-            defaultValue =
-              new DoubleNode(Double.valueOf(defaultValue.getTextValue()));
-          Field f = new Field(fieldName, fieldSchema,
-                              fieldDoc, defaultValue, order);
-          Iterator<String> i = field.getFieldNames();
-          while (i.hasNext()) {                       // add field props
-            String prop = i.next();
-            if (!FIELD_RESERVED.contains(prop))
-              f.addProp(prop, field.get(prop));
+
+      // Switch over the 'type' field and populate result:
+      final JsonNode typeNode = schema.get("type");
+      if (typeNode == null) {
+        throw new SchemaParseException("Schema descriptor has no 'type' field.");
+      } else if (typeNode.isTextual()) {
+        final String type = typeNode.getTextValue();
+        Name name = null;
+        String doc = null;
+        if (type.equals("record") || type.equals("error")
+            || type.equals("enum") || type.equals("fixed")) {
+          String space = getOptionalText(schema, "namespace");
+          doc = getOptionalText(schema, "doc");
+          if (space == null)
+            space = names.space();
+          name = new Name(getRequiredText(schema, "name", "No name in schema"),
+                          space);
+          if (name.space != null) {                 // set default namespace
+            names.space(name.space);
           }
-          f.aliases = parseAliases(field);
-          fields.add(f);
         }
-        result.setFields(fields);
-      } else if (type.equals("enum")) {           // enum
-        JsonNode symbolsNode = schema.get("symbols");
-        if (symbolsNode == null || !symbolsNode.isArray())
-          throw new SchemaParseException("Enum has no symbols: "+schema);
-        LockableArrayList<String> symbols = new LockableArrayList<String>();
-        for (JsonNode n : symbolsNode)
-          symbols.add(n.getTextValue());
-        result = new EnumSchema(name, doc, symbols);
-        if (name != null) names.add(result);
-      } else if (type.equals("array")) {          // array
-        JsonNode itemsNode = schema.get("items");
-        if (itemsNode == null)
-          throw new SchemaParseException("Array has no items type: "+schema);
-        result = new ArraySchema(parse(itemsNode, names));
-      } else if (type.equals("map")) {            // map
-        JsonNode valuesNode = schema.get("values");
-        if (valuesNode == null)
-          throw new SchemaParseException("Map has no values type: "+schema);
-        result = new MapSchema(parse(valuesNode, names));
-      } else if (type.equals("fixed")) {          // fixed
-        JsonNode sizeNode = schema.get("size");
-        if (sizeNode == null || !sizeNode.isInt())
-          throw new SchemaParseException("Invalid or no size: "+schema);
-        result = new FixedSchema(name, doc, sizeNode.getIntValue());
-        if (name != null) names.add(result);
-      } else
-        throw new SchemaParseException("Type not supported: "+type);
+        if (PRIMITIVES.containsKey(type)) {         // primitive
+          result = create(PRIMITIVES.get(type));
+        } else if (type.equals("record") || type.equals("error")) { // record
+          List<Field> fields = new ArrayList<Field>();
+          result = new RecordSchema(name, doc, type.equals("error"));
+          if (name != null) names.add(result);
+          JsonNode fieldsNode = schema.get("fields");
+          if (fieldsNode == null || !fieldsNode.isArray())
+            throw new SchemaParseException("Record has no fields: "+schema);
+          for (JsonNode field : fieldsNode) {
+            String fieldName = getRequiredText(field, "name", "No field name");
+            String fieldDoc = getOptionalText(field, "doc");
+            JsonNode fieldTypeNode = field.get("type");
+            if (fieldTypeNode == null)
+              throw new SchemaParseException("No field type: "+field);
+            if (fieldTypeNode.isTextual()
+                && names.get(fieldTypeNode.getTextValue()) == null)
+              throw new SchemaParseException
+                (fieldTypeNode+" is not a defined name."
+                 +" The type of the \""+fieldName+"\" field must be"
+                 +" a defined name or a {\"type\": ...} expression.");
+            Schema fieldSchema = parse(fieldTypeNode, names);
+            Field.Order order = Field.Order.ASCENDING;
+            JsonNode orderNode = field.get("order");
+            if (orderNode != null)
+              order = Field.Order.valueOf(orderNode.getTextValue().toUpperCase());
+            JsonNode defaultValue = field.get("default");
+            if (defaultValue != null
+                && (Type.FLOAT.equals(fieldSchema.getType())
+                    || Type.DOUBLE.equals(fieldSchema.getType()))
+                && defaultValue.isTextual())
+              defaultValue =
+                new DoubleNode(Double.valueOf(defaultValue.getTextValue()));
+            Field f = new Field(fieldName, fieldSchema,
+                                fieldDoc, defaultValue, order);
+            Iterator<String> i = field.getFieldNames();
+            while (i.hasNext()) {                       // add field props
+              String prop = i.next();
+              if (!FIELD_RESERVED.contains(prop))
+                f.addProp(prop, field.get(prop));
+            }
+            f.aliases = parseAliases(field);
+            fields.add(f);
+          }
+          result.setFields(fields);
+        } else if (type.equals("enum")) {           // enum
+          JsonNode symbolsNode = schema.get("symbols");
+          if (symbolsNode == null || !symbolsNode.isArray())
+            throw new SchemaParseException("Enum has no symbols: "+schema);
+          LockableArrayList<String> symbols = new LockableArrayList<String>();
+          for (JsonNode n : symbolsNode)
+            symbols.add(n.getTextValue());
+          result = new EnumSchema(name, doc, symbols);
+          if (name != null) names.add(result);
+        } else if (type.equals("array")) {          // array
+          JsonNode itemsNode = schema.get("items");
+          if (itemsNode == null)
+            throw new SchemaParseException("Array has no items type: "+schema);
+          result = new ArraySchema(parse(itemsNode, names));
+        } else if (type.equals("map")) {            // map
+          JsonNode valuesNode = schema.get("values");
+          if (valuesNode == null)
+            throw new SchemaParseException("Map has no values type: "+schema);
+          result = new MapSchema(parse(valuesNode, names));
+        } else if (type.equals("fixed")) {          // fixed
+          JsonNode sizeNode = schema.get("size");
+          if (sizeNode == null || !sizeNode.isInt())
+            throw new SchemaParseException("Invalid or no size: "+schema);
+          result = new FixedSchema(name, doc, sizeNode.getIntValue());
+          if (name != null) names.add(result);
+        } else {
+          throw new SchemaParseException("Type not supported: "+type);
+        }
+      } else {
+        result = parse(typeNode, names);
+      }
+
+      // Populate the schema properties:
       Iterator<String> i = schema.getFieldNames();
       while (i.hasNext()) {                       // add properties
         String prop = i.next();

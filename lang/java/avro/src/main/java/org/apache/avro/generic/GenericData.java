@@ -334,6 +334,47 @@ public class GenericData {
     }
   }
 
+  /** Default implementation of {@link GenericUnion}. */
+  public static class UnionValue
+      implements GenericUnion {
+
+    private final Schema schema;
+    private final int typeIndex;
+    private final Object value;
+
+    public UnionValue(Schema schema, int typeIndex, Object value) {
+      this.schema = schema;
+      this.typeIndex = typeIndex;
+      this.value = value;
+      if (this.schema.getType() != Schema.Type.UNION) {
+        throw new IllegalArgumentException("Invalid schema: " + this.schema);
+      }
+      if ((this.typeIndex < 0) || (this.typeIndex >= this.schema.getTypes().size())) {
+        throw new IllegalArgumentException();
+      }
+    }
+
+    @Override
+    public Schema getSchema() {
+      return schema;
+    }
+
+    @Override
+    public int getTypeIndex() {
+      return typeIndex;
+    }
+
+    @Override
+    public Object get() {
+      return value;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s(%s)", this.schema.getTypes().get(this.typeIndex), this.value);
+    }
+  }
+
   /** Returns a {@link DatumReader} for this kind of data. */
   public DatumReader createDatumReader(Schema schema) {
     return new GenericDatumReader(schema, schema, this);
