@@ -1,0 +1,19 @@
+{
+  "name": "RecordName",
+  "namespace": "ns",
+  "type": "record",
+  "fields": [
+    {"name": "field", "type": "boolean"},
+    {
+      "name": "field",
+      "type": {
+        "name": "Record2Name",
+        "namespace": "ns2",
+        "type": "record",
+        "fields": [
+          {"name": "field", "type": "ns.RecordName"}
+        ]
+      }
+    }
+  ]
+}

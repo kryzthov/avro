@@ -109,7 +109,7 @@ public class Idl implements Closeable {
     this(inputFile);
     this.resourceLoader = resourceLoader;
   }
-  
+
   private Idl(URL input, Idl parent) throws IOException {
     this(input.openStream(), "UTF-8");
     this.inputDir = "file".equals(input.getProtocol())
@@ -117,7 +117,7 @@ public class Idl implements Closeable {
       : parent.inputDir;
     this.resourceLoader = parent.resourceLoader;
   }
-  
+
   public void close() throws IOException {
     jj_input_stream.inputStream.close();
   }
@@ -148,7 +148,7 @@ public class Idl implements Closeable {
         throw error(key+" values must be textual: "+n, token);
     return values;
   }
-  
+
   private URL findFile(String importFile) throws IOException {
     File file = new File(this.inputDir, importFile);
     URL result = null;
@@ -247,7 +247,7 @@ TOKEN :
     (   <DECIMAL_LITERAL> (["l","L"])?
       | <HEX_LITERAL> (["l","L"])?
       | <OCTAL_LITERAL> (["l","L"])?
-        )  
+        )
   >
 |
   < #DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])* >
@@ -1170,7 +1170,7 @@ Protocol ImportIdl() : {
   <IDL> importFile = JsonString() ";"
     {
       try {
-        Idl idl = new Idl(findFile(importFile), this); 
+        Idl idl = new Idl(findFile(importFile), this);
         try {
           return idl.CompilationUnit();
         } finally {
@@ -1178,7 +1178,7 @@ Protocol ImportIdl() : {
         }
       } catch (IOException e) {
         throw error("Error importing "+importFile+": "+e, token);
-      }        
+      }
     }
 }
 
@@ -1198,7 +1198,7 @@ Protocol ImportProtocol() : {
         }
       } catch (IOException e) {
         throw error("Error importing "+importFile+": "+e, token);
-      }        
+      }
     }
 }
 
@@ -1221,7 +1221,7 @@ Schema ImportSchema() : {
         }
       } catch (IOException e) {
         throw error("Error importing "+importFile+": "+e, token);
-      }        
+      }
     }
 }
 
@@ -1309,11 +1309,11 @@ void VariableDeclarator(Schema type, List<Field> fields):
 }
 {
     ( SchemaProperty(props) )*
-    
+
   name = Identifier()
 
     [ <EQUALS> defaultValue=Json() ]
-    
+
   {
     Field.Order order = Field.Order.ASCENDING;
     for (String key : props.keySet())
@@ -1366,7 +1366,7 @@ Message MessageDeclaration(Protocol p, Map<String, JsonNode> props):
     return oneWay
     ? p.createMessage(name, msgDoc, props, request)
     : p.createMessage(name, msgDoc, props, request, response, errors);
-    
+
   }
 }
 
@@ -1407,8 +1407,7 @@ Schema Type():
   Map<String, JsonNode> props = new LinkedHashMap<String, JsonNode>();
 }
 {
-
-    ( SchemaProperty(props) )*
+  ( SchemaProperty(props) )*
   (
       LOOKAHEAD(2) s = ReferenceType()
     | s = PrimitiveType()
@@ -1458,7 +1457,7 @@ Schema ReferenceType():
   (
     part = Identifier() { sb.append(part); }
     ("." tok = AnyIdentifier() { sb.append(".").append(tok.image); })*
-    )
+  )
   {
     String name = sb.toString();
     if ((name.indexOf('.') == -1) && namespace != null)
@@ -1553,7 +1552,7 @@ Token AnyIdentifier():
 
 JsonNode Json() :
 { String s; Token t; JsonNode n; }
-{ 
+{
 ( s = JsonString() { n = new TextNode(s); }
 | (t=<INTEGER_LITERAL> { n = new LongNode(Long.parseLong(t.image)); })
 | (t=<FLOATING_POINT_LITERAL> {n=new DoubleNode(Double.parseDouble(t.image));})
@@ -1577,7 +1576,7 @@ String JsonString() :
 }
 
 JsonNode JsonObject() :
-{ 
+{
   ObjectNode o = FACTORY.objectNode();
 }
 {
@@ -1598,7 +1597,7 @@ void JsonPair(ObjectNode o) :
 }
 {
   name=JsonString() <COLON> value=Json()
-    { o.put(name, value); } 
+    { o.put(name, value); }
 }
 
 JsonNode JsonArray() :
