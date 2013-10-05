@@ -42,6 +42,7 @@ case "$target" in
 	# run lang-specific tests
         (cd lang/java; mvn test)
 	(cd lang/py; ant test)
+	(cd lang/py3; ant test)
 	(cd lang/c; ./build.sh test)
 	(cd lang/c++; ./build.sh test)
 	(cd lang/csharp; ./build.sh test)
@@ -53,6 +54,7 @@ case "$target" in
         mkdir -p build/interop/data
 	(cd lang/java/avro; mvn -P interop-data-generate generate-resources)
 	(cd lang/py; ant interop-data-generate)
+	(cd lang/py3; ant interop-data-generate)
 	(cd lang/c; ./build.sh interop-data-generate)
 	#(cd lang/c++; make interop-data-generate)
 	(cd lang/ruby; rake generate_interop)
@@ -61,6 +63,7 @@ case "$target" in
 	# run interop data tests
 	(cd lang/java; mvn test -P interop-data-test)
 	(cd lang/py; ant interop-data-test)
+	(cd lang/py3; ant interop-data-test)
 	(cd lang/c; ./build.sh interop-data-test)
 	#(cd lang/c++; make interop-data-test)
 	(cd lang/ruby; rake interop)
@@ -100,6 +103,7 @@ case "$target" in
         (mvn -N -P copy-artifacts antrun:run) 
 
 	(cd lang/py; ant dist)
+	(cd lang/py3; ant dist)
 
 	(cd lang/c; ./build.sh dist)
 
@@ -148,6 +152,7 @@ case "$target" in
         (mvn clean)         
 
 	(cd lang/py; ant clean)
+	(cd lang/py3; ant clean)
 
 	(cd lang/c; ./build.sh clean)
 
