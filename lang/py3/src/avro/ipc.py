@@ -10,17 +10,17 @@
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
 #
-# http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Support for inter-process calls.
-"""
 
+"""RPC/IPC support."""
+
+import abc
 import http.client
 import io
 
@@ -28,9 +28,8 @@ from avro import io as avro_io
 from avro import protocol
 from avro import schema
 
-#
+# ------------------------------------------------------------------------------
 # Constants
-#
 
 # Handshake schema is pulled in during build
 HANDSHAKE_REQUEST_SCHEMA = schema.Parse("""
@@ -56,13 +55,16 @@ SYSTEM_ERROR_SCHEMA = schema.Parse('["string"]')
 REMOTE_HASHES = {}
 REMOTE_PROTOCOLS = {}
 
-BIG_ENDIAN_INT_STRUCT = avro_io.struct_class('!I')
-BUFFER_HEADER_LENGTH = 4
+# Decoder/encoder for a 32 bits big-endian integer.
+UINT32_BE = avro_io.STRUCT_INT
+
+# Default size of the buffers use to frame messages:
 BUFFER_SIZE = 8192
 
-#
+
+# ------------------------------------------------------------------------------
 # Exceptions
-#
+
 
 class AvroRemoteException(schema.AvroException):
   """
@@ -74,9 +76,10 @@ class AvroRemoteException(schema.AvroException):
 class ConnectionClosedException(schema.AvroException):
   pass
 
-#
+
+# ------------------------------------------------------------------------------
 # Base IPC Classes (Requestor/Responder)
-#
+
 
 class BaseRequestor(object):
   """Base class for the client side of a protocol interaction."""
@@ -87,9 +90,13 @@ class BaseRequestor(object):
     self._remote_hash = None
     self._send_protocol = None
 
-  # read-only properties
-  local_protocol = property(lambda self: self._local_protocol)
-  transceiver = property(lambda self: self._transceiver)
+  @property
+  def local_protocol(self):
+    return self._local_protocol
+
+  @property
+  def transceiver(self):
+    return self._transceiver
 
   # read/write properties
   def set_remote_protocol(self, new_remote_protocol):
@@ -108,11 +115,16 @@ class BaseRequestor(object):
   send_protocol = property(lambda self: self._send_protocol, set_send_protocol)
 
   def request(self, message_name, request_datum):
-    """
-    Writes a request message and reads a response or error message.
+    """Writes a request message and reads a response or error message.
+
+    Args:
+      message_name: Name of the IPC method.
+      request_datum: IPC request.
+    Returns:
+      The IPC response.
     """
     # build handshake and call request
-    buffer_writer = io.StringIO()
+    buffer_writer = io.BytesIO()
     buffer_encoder = avro_io.BinaryEncoder(buffer_writer)
     self.write_handshake_request(buffer_encoder)
     self.write_call_request(message_name, request_datum, buffer_encoder)
@@ -227,21 +239,24 @@ class BaseRequestor(object):
     datum_reader = avro_io.DatumReader(writer_schema, reader_schema)
     return AvroRemoteException(datum_reader.read(decoder))
 
+
 class Requestor(BaseRequestor):
 
   def issue_request(self, call_request, message_name, request_datum):
-    call_response = self.transceiver.transceive(call_request)
+    call_response = self.transceiver.Transceive(call_request)
 
     # process the handshake and call response
-    buffer_decoder = avro_io.BinaryDecoder(io.StringIO(call_response))
+    buffer_decoder = avro_io.BinaryDecoder(io.BytesIO(call_response))
     call_response_exists = self.read_handshake_response(buffer_decoder)
     if call_response_exists:
       return self.read_call_response(message_name, buffer_decoder)
     else:
       return self.request(message_name, request_datum)
 
+
 class Responder(object):
   """Base class for the server side of a protocol interaction."""
+
   def __init__(self, local_protocol):
     self._local_protocol = local_protocol
     self._local_hash = self.local_protocol.md5
@@ -371,118 +386,165 @@ class Responder(object):
     datum_writer = avro_io.DatumWriter(writer_schema)
     datum_writer.write(str(error_exception), encoder)
 
-#
-# Utility classes
-#
+
+# ------------------------------------------------------------------------------
+# Framed message
+
 
 class FramedReader(object):
   """Wrapper around a file-like object to read framed data."""
+
   def __init__(self, reader):
     self._reader = reader
 
-  # read-only properties
-  reader = property(lambda self: self._reader)
+  def Read(self):
+    """Reads one message from the configured reader.
 
-  def read_framed_message(self):
-    message = []
-    while True:
-      buffer = io.StringIO()
-      buffer_length = self._read_buffer_length()
-      if buffer_length == 0:
-        return ''.join(message)
-      while buffer.tell() < buffer_length:
-        chunk = self.reader.read(buffer_length - buffer.tell())
-        if chunk == '':
-          raise ConnectionClosedException("Reader read 0 bytes.")
-        buffer.write(chunk)
-      message.append(buffer.getvalue())
+    Returns:
+      The message, as bytes.
+    """
+    message = io.BytesIO()
+    message_size = self._ReadInt32()
+    while message_size > 0:
+      while message_size > 0:
+        data_bytes = self._reader.read(message_size)
+        if len(data_bytes) == 0:
+          raise ConnectionClosedException('Reader read 0 bytes.')
+        message.write(data_bytes)
+        message_size -= len(data_bytes)
+      message_size = self._ReadInt32()
 
-  def _read_buffer_length(self):
-    read = self.reader.read(BUFFER_HEADER_LENGTH)
-    if read == '':
-      raise ConnectionClosedException("Reader read 0 bytes.")
-    return BIG_ENDIAN_INT_STRUCT.unpack(read)[0]
+    return message.getvalue()
+
+  def _ReadInt32(self):
+    encoded = self._reader.read(UINT32_BE.size)
+    if len(encoded) != UINT32_BE.size:
+      raise ConnectionClosedException('Invalid header: %r' % encoded)
+    return UINT32_BE.unpack(encoded)[0]
+
 
 class FramedWriter(object):
   """Wrapper around a file-like object to write framed data."""
+
   def __init__(self, writer):
     self._writer = writer
 
-  # read-only properties
-  writer = property(lambda self: self._writer)
+  def Write(self, message):
+    """Writes a message.
 
-  def write_framed_message(self, message):
-    message_length = len(message)
-    total_bytes_sent = 0
-    while message_length - total_bytes_sent > 0:
-      if message_length - total_bytes_sent > BUFFER_SIZE:
-        buffer_length = BUFFER_SIZE
-      else:
-        buffer_length = message_length - total_bytes_sent
-      self.write_buffer(message[total_bytes_sent:
-                                (total_bytes_sent + buffer_length)])
-      total_bytes_sent += buffer_length
+    Args:
+      message: Message to write, as bytes.
+    """
+    while len(message) > 0:
+      chunk_size = max(BUFFER_SIZE, len(message))
+      chunk = message[:chunk_size]
+      self._WriteBuffer(chunk)
+      message = message[chunk_size:]
+
     # A message is always terminated by a zero-length buffer.
-    self.write_buffer_length(0)
+    self._WriteUnsignedInt32(0)
 
-  def write_buffer(self, chunk):
-    buffer_length = len(chunk)
-    self.write_buffer_length(buffer_length)
-    self.writer.write(chunk)
+  def _WriteBuffer(self, chunk):
+    self._WriteUnsignedInt32(len(chunk))
+    self._writer.write(chunk)
 
-  def write_buffer_length(self, n):
-    self.writer.write(BIG_ENDIAN_INT_STRUCT.pack(n))
+  def _WriteUnsignedInt32(self, uint32):
+    self._writer.write(UINT32_BE.pack(uint32))
 
-#
-# Transceiver Implementations
-#
 
-class HTTPTransceiver(object):
-  """
-  A simple HTTP-based transceiver implementation.
-  Useful for clients but not for servers
-  """
-  def __init__(self, host, port, req_resource='/'):
-    self.req_resource = req_resource
-    self.conn = http.client.HTTPConnection(host, port)
-    self.conn.connect()
+# ------------------------------------------------------------------------------
+# Transceiver (send/receive channel)
 
-  # read-only properties
-  sock = property(lambda self: self.conn.sock)
-  remote_name = property(lambda self: self.sock.getsockname())
 
-  # read/write properties
-  def set_conn(self, new_conn):
-    self._conn = new_conn
-  conn = property(lambda self: self._conn, set_conn)
-  req_resource = '/'
+class Transceiver(object, metaclass=abc.ABCMeta):
+  @abc.abstractproperty
+  def remote_name(self):
+    pass
 
-  def transceive(self, request):
-    self.write_framed_message(request)
-    result = self.read_framed_message()
+  @abc.abstractmethod
+  def ReadMessage(self):
+    """Reads a single message from the channel.
+
+    Blocks until a message can be read.
+
+    Returns:
+      The message read from the channel.
+    """
+    pass
+
+  @abc.abstractmethod
+  def WriteMessage(self, message):
+    """Writes a message into the channel.
+
+    Blocks until the message has been written.
+
+    Args:
+      message: Message to write.
+    """
+    pass
+
+  def Transceive(self, request):
+    """Processes a single request-reply interaction.
+
+    Synchronous request-reply interaction.
+
+    Args:
+      request: Request message.
+    Returns:
+      The reply message.
+    """
+    self.WriteMessage(request)
+    result = self.ReadMessage()
     return result
 
-  def read_framed_message(self):
-    response = self.conn.getresponse()
+  def Close(self):
+    """Closes this transceiver."""
+    pass
+
+
+class HTTPTransceiver(Transceiver):
+  """HTTP-based transceiver implementation."""
+
+  def __init__(self, host, port, req_resource='/'):
+    """Initializes a new HTTP transceiver.
+
+    Args:
+      host: Name or IP address of the remote host to interact with.
+      port: Port the remote server is listening on.
+      req_resource: Optional HTTP resource path to use, '/' by default.
+    """
+    self._req_resource = req_resource
+    self._conn = http.client.HTTPConnection(host, port)
+    self._conn.connect()
+
+  @property
+  def remote_name(self):
+    return self._conn.sock.getsockname()
+
+  def ReadMessage(self):
+    response = self._conn.getresponse()
     response_reader = FramedReader(response)
-    framed_message = response_reader.read_framed_message()
+    framed_message = response_reader.Read()
     response.read()    # ensure we're ready for subsequent requests
     return framed_message
 
-  def write_framed_message(self, message):
+  def WriteMessage(self, message):
     req_method = 'POST'
     req_headers = {'Content-Type': 'avro/binary'}
 
-    req_body_buffer = FramedWriter(io.StringIO())
-    req_body_buffer.write_framed_message(message)
-    req_body = req_body_buffer.writer.getvalue()
+    bio = io.BytesIO()
+    req_body_buffer = FramedWriter(bio)
+    req_body_buffer.Write(message)
+    req_body = bio.getvalue()
 
-    self.conn.request(req_method, self.req_resource, req_body, req_headers)
+    self._conn.request(req_method, self.req_resource, req_body, req_headers)
 
-  def close(self):
-    self.conn.close()
+  def Close(self):
+    self._conn.close()
+    self._conn = None
 
-#
-# Server Implementations (none yet)
-#
+
+# ------------------------------------------------------------------------------
+# Server Implementations
+
 

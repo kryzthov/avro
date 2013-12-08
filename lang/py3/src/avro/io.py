@@ -59,24 +59,11 @@ INT_MAX_VALUE = (1 << 31) - 1
 LONG_MIN_VALUE = -(1 << 63)
 LONG_MAX_VALUE = (1 << 63) - 1
 
-# TODO: shouldn't ! be < for little-endian (according to spec?)
-if sys.version_info >= (2, 5, 0):
-  struct_class = struct.Struct
-else:
-  class SimpleStruct(object):
-    def __init__(self, format):
-      self.format = format
-    def pack(self, *args):
-      return struct.pack(self.format, *args)
-    def unpack(self, *args):
-      return struct.unpack(self.format, *args)
-  struct_class = SimpleStruct
-
-STRUCT_INT = struct_class('!I')     # big-endian unsigned int
-STRUCT_LONG = struct_class('!Q')    # big-endian unsigned long long
-STRUCT_FLOAT = struct_class('!f')   # big-endian float
-STRUCT_DOUBLE = struct_class('!d')  # big-endian double
-STRUCT_CRC32 = struct_class('>I')   # big-endian unsigned int
+STRUCT_INT = struct.Struct('!I')     # big-endian unsigned int
+STRUCT_LONG = struct.Struct('!Q')    # big-endian unsigned long long
+STRUCT_FLOAT = struct.Struct('!f')   # big-endian float
+STRUCT_DOUBLE = struct.Struct('!d')  # big-endian double
+STRUCT_CRC32 = struct.Struct('>I')   # big-endian unsigned int
 
 
 # ------------------------------------------------------------------------------
