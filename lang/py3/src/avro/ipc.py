@@ -31,13 +31,36 @@ from avro import schema
 # ------------------------------------------------------------------------------
 # Constants
 
-# Handshake schema is pulled in during build
 HANDSHAKE_REQUEST_SCHEMA = schema.Parse("""
-@HANDSHAKE_REQUEST_SCHEMA@
+{
+    "type": "record",
+    "name": "HandshakeRequest", "namespace":"org.apache.avro.ipc",
+    "fields": [
+        {"name": "clientHash",
+         "type": {"type": "fixed", "name": "MD5", "size": 16}},
+        {"name": "clientProtocol", "type": ["null", "string"]},
+        {"name": "serverHash", "type": "MD5"},
+    {"name": "meta", "type": ["null", {"type": "map", "values": "bytes"}]}
+    ]
+}
 """)
 
 HANDSHAKE_RESPONSE_SCHEMA = schema.Parse("""
-@HANDSHAKE_RESPONSE_SCHEMA@
+{
+    "type": "record",
+    "name": "HandshakeResponse", "namespace": "org.apache.avro.ipc",
+    "fields": [
+        {"name": "match",
+         "type": {"type": "enum", "name": "HandshakeMatch",
+                  "symbols": ["BOTH", "CLIENT", "NONE"]}},
+        {"name": "serverProtocol",
+         "type": ["null", "string"]},
+        {"name": "serverHash",
+         "type": ["null", {"type": "fixed", "name": "MD5", "size": 16}]},
+    {"name": "meta",
+         "type": ["null", {"type": "map", "values": "bytes"}]}
+    ]
+}
 """)
 
 HANDSHAKE_REQUESTOR_WRITER = avro_io.DatumWriter(HANDSHAKE_REQUEST_SCHEMA)
