@@ -248,7 +248,7 @@ def main(argv=None):
   parser.add_argument(
       '--version',
       action='version',
-      version='%(prog)s @AVRO_VERSION@',
+      version='%(prog)s 1.7.6-SNAPSHOT',
   )
 
   # cat options:
