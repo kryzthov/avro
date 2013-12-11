@@ -375,7 +375,7 @@ class DataFileReader(object):
 
   def __next__(self):
     """Implements the iterator interface."""
-    return self.next()
+    return next(self)
 
   # read-only properties
   @property
@@ -508,7 +508,7 @@ class DataFileReader(object):
 
   # TODO: handle block of length zero
   # TODO: clean this up with recursion
-  def next(self):
+  def __next__(self):
     """Return the next datum in the file."""
     if self.block_count == 0:
       if self.is_EOF():

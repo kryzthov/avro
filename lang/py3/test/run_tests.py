@@ -18,18 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Runs all tests.
+"""
+Runs all tests.
 
-Usage:
-
-- Run tests from all modules:
-    ./run_tests.py discover [-v]
-
-- Run tests in a specific module:
-    ./run_tests.py test_schema [-v]
-
-- Run a specific test:
-    ./run_tests.py test_schema.TestSchema.testParse [-v]
 
 - Set logging level:
     PYTHON_LOG_LEVEL=<log-level> ./run_tests.py ...
@@ -37,15 +28,13 @@ Usage:
     log-level 10 includes debug logging.
     log-level 20 includes info logging.
 
-- Command-line help:
-  ./run_tests.py -h
-  ./run_tests.py discover -h
 """
 
 import logging
 import os
 import sys
 import unittest
+import subprocess
 
 import test_datafile
 import test_datafile_interop
@@ -55,17 +44,26 @@ import test_protocol
 import test_schema
 import test_script
 
+def xsystem(args):
+    if subprocess.call(args) != 0:
+        raise RuntimeError('check_exit failed, while executing: ', ' '.join(args))
+
 
 if __name__ == '__main__':
-  log_level = int(os.environ.get('PYTHON_LOG_LEVEL', logging.INFO))
+    log_level = int(os.environ.get('PYTHON_LOG_LEVEL', logging.INFO))
 
-  log_formatter = logging.Formatter(
-      '%(asctime)s %(levelname)s %(filename)s:%(lineno)s : %(message)s')
-  logging.root.handlers.clear()
-  logging.root.setLevel(log_level)
-  console_handler = logging.StreamHandler()
-  console_handler.setFormatter(log_formatter)
-  console_handler.setLevel(logging.DEBUG)
-  logging.root.addHandler(console_handler)
+    log_formatter = logging.Formatter(
+        '%(asctime)s %(levelname)s %(filename)s:%(lineno)s : %(message)s')
+    logging.root.handlers.clear()
+    logging.root.setLevel(log_level)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_formatter)
+    console_handler.setLevel(logging.DEBUG)
+    logging.root.addHandler(console_handler)
+    xsystem(["./gen_interop_data.py", "interop.avsc", "py.avro"])
+    suite = unittest.TestSuite()
+    suite.addTests(unittest.defaultTestLoader.discover('.'))
+    unittest.TextTestRunner(verbosity=2).run(suite)
 
-  unittest.main()
+
+    #unittest.main()
