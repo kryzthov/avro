@@ -28,6 +28,7 @@ import json
 import os
 import sys
 import traceback
+import pprint
 
 from avro import datafile
 from avro import io as avro_io
@@ -64,7 +65,8 @@ def select_printer(format):
   return {
       'json' : print_json,
       'json-pretty' : print_json_pretty,
-      'csv' : print_csv
+      'csv' : print_csv,
+      'pprint' : pprint.pprint
   }[format]
 
 
@@ -268,7 +270,7 @@ def main(argv=None):
   cat_options.add_argument(
       '-f', '--format',
       default='json',
-      choices=['json', 'csv', 'json-pretty'],
+      choices=['json', 'csv', 'json-pretty', 'pprint'],
       help='record format',
   )
   cat_options.add_argument(
