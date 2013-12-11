@@ -35,7 +35,7 @@ DATUM = {
   'mapField': {'a': {'label': 'a'}, 'bee': {'label': 'cee'}},
   'unionField': 12.0,
   'enumField': 'C',
-  'fixedField': '1019181716151413',
+  'fixedField': b'1019181716151413',
   'recordField': {'label': 'blah', 'children': [{'label': 'inner', 'children': []}]},
 }
 
