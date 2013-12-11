@@ -46,6 +46,7 @@ import logging
 import os
 import sys
 import unittest
+import subprocess
 
 import test_datafile
 import test_datafile_interop
@@ -54,6 +55,10 @@ import test_ipc
 import test_protocol
 import test_schema
 import test_script
+
+def xsystem(args):
+    if subprocess.call(args) != 0:
+        raise RuntimeError('check_exit failed, while executing: ', ' '.join(args))
 
 
 if __name__ == '__main__':
@@ -67,5 +72,6 @@ if __name__ == '__main__':
   console_handler.setFormatter(log_formatter)
   console_handler.setLevel(logging.DEBUG)
   logging.root.addHandler(console_handler)
+  xsystem(["./gen_interop_data.py", "interop.avsc", "py.avro"])
 
   unittest.main()

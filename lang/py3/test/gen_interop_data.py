@@ -39,11 +39,20 @@ DATUM = {
   'recordField': {'label': 'blah', 'children': [{'label': 'inner', 'children': []}]},
 }
 
+
+def main():
+    if len(sys.argv) != 3:
+        sys.stderr.write("usage: {} interop.avsc py.avro\n".format(sys.argv[0]))
+        return 1
+    interop_schema = schema.Parse(open(sys.argv[1], 'r').read())
+    writer = open(sys.argv[2], 'wb')
+    datum_writer = io.DatumWriter()
+    # NB: not using compression
+    dfw = datafile.DataFileWriter(writer, datum_writer, interop_schema)
+    dfw.append(DATUM)
+    dfw.close()
+    return 0
+
 if __name__ == "__main__":
-  interop_schema = schema.Parse(open(sys.argv[1], 'r').read())
-  writer = open(sys.argv[2], 'wb')
-  datum_writer = io.DatumWriter()
-  # NB: not using compression
-  dfw = datafile.DataFileWriter(writer, datum_writer, interop_schema)
-  dfw.append(DATUM)
-  dfw.close()
+    sys.exit(main())
+

@@ -25,18 +25,20 @@ import unittest
 from avro import io
 from avro import datafile
 
+from gen_interop_data import DATUM
 
 class TestDataFileInterop(unittest.TestCase):
   def testInterop(self):
-    for f in os.listdir('@INTEROP_DATA_DIR@'):
+    for f in ['py.avro']:
       logging.debug('Reading %s', f)
 
       # read data in binary from file
-      reader = open(os.path.join('@INTEROP_DATA_DIR@', f), 'rb')
+      reader = open(f, 'rb')
       datum_reader = io.DatumReader()
       dfr = datafile.DataFileReader(reader, datum_reader)
       for datum in dfr:
         self.assertIsNotNone(datum)
+        self.assertEqual(datum, DATUM)
 
 
 if __name__ == '__main__':
