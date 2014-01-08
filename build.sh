@@ -42,6 +42,7 @@ case "$target" in
 	# run lang-specific tests
         (cd lang/java; mvn test)
 	(cd lang/py; ant test)
+	(cd lang/py3; python3 setup.py test)
 	(cd lang/c; ./build.sh test)
 	(cd lang/c++; ./build.sh test)
 	(cd lang/csharp; ./build.sh test)
@@ -77,7 +78,7 @@ case "$target" in
         # ensure version matches
         # FIXME: enforcer is broken:MENFORCER-42
         # mvn enforcer:enforce -Davro.version=$VERSION
-        
+
 	# build source tarball
         mkdir -p build
 
@@ -93,13 +94,14 @@ case "$target" in
         (cd build; tar czf ../dist/${SRC_DIR}.tar.gz ${SRC_DIR})
 
 	# build lang-specific artifacts
-        
+
 	(cd lang/java; mvn package -DskipTests -Dhadoop.version=2; rm -rf mapred/target/classes/;
-	  mvn -P dist package -DskipTests -Davro.version=$VERSION javadoc:aggregate) 
+	  mvn -P dist package -DskipTests -Davro.version=$VERSION javadoc:aggregate)
         (cd lang/java/trevni/doc; mvn site)
-        (mvn -N -P copy-artifacts antrun:run) 
+        (mvn -N -P copy-artifacts antrun:run)
 
 	(cd lang/py; ant dist)
+	(cd lang/py3; python3 setup.py bdist)
 
 	(cd lang/c; ./build.sh dist)
 
@@ -145,9 +147,10 @@ case "$target" in
 	rm -rf build dist
 	(cd doc; ant clean)
 
-        (mvn clean)         
+        (mvn clean)
 
 	(cd lang/py; ant clean)
+	(cd lang/py3; python3 setup.py clean)
 
 	(cd lang/c; ./build.sh clean)
 
