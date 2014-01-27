@@ -26,6 +26,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.avro.AvroTestUtil;
 import org.apache.avro.Schema;
@@ -105,14 +107,22 @@ public class TestSpecificCompiler {
     assertFalse(compiler.privateFields());
     compiler.compileToDestination(this.src, this.outputDir);
     assertTrue(this.outputFile.exists());
-    BufferedReader reader = new BufferedReader(new FileReader(this.outputFile));
-    String line = null;
-    while ((line = reader.readLine()) != null) {
-      // No line, once trimmed, should start with a public field declaration
-      line = line.trim();
-      assertFalse("Line started with a public field declaration: " + line,
-        line.startsWith("public int value"));
+
+    final StringBuffer buf = new StringBuffer();
+    final BufferedReader reader = new BufferedReader(new FileReader(this.outputFile));
+    try {
+      String line = null;
+      while ((line = reader.readLine()) != null) {
+        buf.append(line);
+      }
+    } finally {
+      reader.close();
     }
+
+    final String generatedJavaSource = buf.toString();
+    final Pattern regex = Pattern.compile("@Deprecated\\s+public\\s+int\\s+value\\s*;");
+    final Matcher matcher = regex.matcher(generatedJavaSource);
+    assertTrue("Cannot find definition for deprecated public int value.", matcher.find());
   }
 
   @Test

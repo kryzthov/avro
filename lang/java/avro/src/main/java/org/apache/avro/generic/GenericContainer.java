@@ -21,7 +21,11 @@ import org.apache.avro.Schema;
 
 /** Contains data of other types. */
 public interface GenericContainer {
-  /** The schema of this instance. */
+  /**
+   * Returns the Avro schema of this data container.
+   *
+   * @return the Avro schema of this data container.
+   */
   Schema getSchema();
 }
 

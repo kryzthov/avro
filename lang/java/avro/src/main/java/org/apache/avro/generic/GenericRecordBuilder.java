@@ -27,9 +27,11 @@ import org.apache.avro.generic.GenericData.Record;
 
 /** A RecordBuilder for generic records. GenericRecordBuilder fills in default values
  * for fields if they are not specified.  */
-public class GenericRecordBuilder extends RecordBuilderBase<Record> {
+public class GenericRecordBuilder extends RecordBuilderBase<Record>
+    implements IGenericRecordBuilder<GenericRecordBuilder> {
+
   private final GenericData.Record record;
-  
+
   /**
    * Creates a GenericRecordBuilder for building Record instances.
    * @param schema the schema associated with the record class.
@@ -38,7 +40,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
     super(schema, GenericData.get());
     record = new GenericData.Record(schema);
   }
-  
+
   /**
    * Creates a GenericRecordBuilder by copying an existing GenericRecordBuilder.
    * @param other the GenericRecordBuilder to copy.
@@ -47,7 +49,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
     super(other, GenericData.get());
     record = new GenericData.Record(other.record, /* deepCopy = */ true);
   }
-  
+
   /**
    * Creates a GenericRecordBuilder by copying an existing record instance.
    * @param other the record instance to copy.
@@ -55,7 +57,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
   public GenericRecordBuilder(Record other) {
     super(other.getSchema(), GenericData.get());
     record = new GenericData.Record(other, /* deepCopy = */ true);
-    
+
     // Set all fields in the RecordBuilder that are set in the record
     for (Field f : schema().getFields()) {
       Object value = other.get(f.pos());
@@ -66,44 +68,19 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
       }
     }
   }
-  
-  /**
-   * Gets the value of a field.
-   * @param fieldName the name of the field to get.
-   * @return the value of the field with the given name, or null if not set.
-   */
-  public Object get(String fieldName) {
-    return get(schema().getField(fieldName));
-  }
-  
-  /**
-   * Gets the value of a field.
-   * @param field the field to get.
-   * @return the value of the given field, or null if not set.
-   */
-  public Object get(Field field) {
-    return get(field.pos());
-  }
-  
+
   /**
    * Gets the value of a field.
    * @param pos the position of the field to get.
    * @return the value of the field with the given position, or null if not set.
    */
-  protected Object get(int pos) {
+  @Override
+  public Object get(int pos) {
     return record.get(pos);
   }
-  
-  /**
-   * Sets the value of a field.
-   * @param fieldName the name of the field to set.
-   * @param value the value to set.
-   * @return a reference to the RecordBuilder.
-   */
-  public GenericRecordBuilder set(String fieldName, Object value) {
-    return set(schema().getField(fieldName), value);
-  }
-  
+
+  // -----------------------------------------------------------------------------------------------
+
   /**
    * Sets the value of a field.
    * @param field the field to set.
@@ -113,17 +90,24 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
   public GenericRecordBuilder set(Field field, Object value) {
     return set(field, field.pos(), value);
   }
-  
+
   /**
    * Sets the value of a field.
    * @param pos the field to set.
    * @param value the value to set.
    * @return a reference to the RecordBuilder.
    */
-  protected GenericRecordBuilder set(int pos, Object value) {
+  public GenericRecordBuilder set(int pos, Object value) {
     return set(fields()[pos], pos, value);
   }
-  
+
+  // -----------------------------------------------------------------------------------------------
+
+  @Override
+  public void put(int fieldIndex, Object value) {
+    set(fields()[fieldIndex], fieldIndex, value);
+  }
+
   /**
    * Sets the value of a field.
    * @param field the field to set.
@@ -137,34 +121,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
     fieldSetFlags()[pos] = true;
     return this;
   }
-  
-  /**
-   * Checks whether a field has been set.
-   * @param fieldName the name of the field to check.
-   * @return true if the given field is non-null; false otherwise.
-   */
-  public boolean has(String fieldName) {
-    return has(schema().getField(fieldName));
-  }
-  
-  /**
-   * Checks whether a field has been set.
-   * @param field the field to check.
-   * @return true if the given field is non-null; false otherwise.
-   */
-  public boolean has(Field field) {
-    return has(field.pos());
-  }
-  
-  /**
-   * Checks whether a field has been set.
-   * @param pos the position of the field to check.
-   * @return true if the given field is non-null; false otherwise.
-   */
-  protected boolean has(int pos) {
-    return fieldSetFlags()[pos];
-  }
-  
+
   /**
    * Clears the value of the given field.
    * @param fieldName the name of the field to clear.
@@ -182,18 +139,29 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
   public GenericRecordBuilder clear(Field field) {
     return clear(field.pos());
   }
-  
+
+  /**
+   * Sets the value of a field.
+   * @param fieldName the name of the field to set.
+   * @param value the value to set.
+   * @return a reference to the RecordBuilder.
+   */
+  public GenericRecordBuilder set(String fieldName, Object value) {
+    return set(schema().getField(fieldName), value);
+  }
+
   /**
    * Clears the value of the given field.
    * @param pos the position of the field to clear.
    * @return a reference to the RecordBuilder.
    */
-  protected GenericRecordBuilder clear(int pos) {
+  public GenericRecordBuilder clear(int pos) {
     record.put(pos, null);
     fieldSetFlags()[pos] = false;
     return this;
   }
-  
+
+  /** {@inheritDoc} */
   @Override
   public Record build() {
     Record record;
@@ -202,7 +170,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
     } catch (Exception e) {
       throw new AvroRuntimeException(e);
     }
-    
+
     for (Field field : fields()) {
       Object value;
       try {
@@ -214,10 +182,10 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
         record.put(field.pos(), value);
       }
     }
-    
+
     return record;
   }
-  
+
   /**
    * Gets the value of the given field.
    * If the field has been set, the set value is returned (even if it's null).
@@ -233,6 +201,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
         record.get(field.pos()) : defaultValue(field);
   }
 
+  /** {@inheritDoc} */
   @Override
   public int hashCode() {
     final int prime = 31;
@@ -241,6 +210,7 @@ public class GenericRecordBuilder extends RecordBuilderBase<Record> {
     return result;
   }
 
+  /** {@inheritDoc} */
   @Override
   public boolean equals(Object obj) {
     if (this == obj)

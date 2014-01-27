@@ -17,8 +17,8 @@
  */
 package org.apache.avro.generic;
 
-/** Interface for mutable records accessed by field index.*/
-public interface IndexedRecord extends ImmutableIndexedRecord {
+/** Interface for immutable records accessed by field index.*/
+public interface ImmutableIndexedRecord extends GenericContainer {
   /**
    * Return the value of a field given its position in the schema.
    *
@@ -28,17 +28,5 @@ public interface IndexedRecord extends ImmutableIndexedRecord {
    * @param fieldIndex Index of the field to read.
    * @return the value of the field with the specified index.
    */
-  @Override
   Object get(int fieldIndex);
-
-  /**
-   * Set the value of a field given its position in the schema.
-   *
-   * <p>This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumReader} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to set.
-   * @param value New value of the field.
-   */
-  void put(int fieldIndex, Object value);
 }

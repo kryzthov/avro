@@ -18,8 +18,8 @@
 package org.apache.avro.compiler.specific;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -29,31 +29,35 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
-import javax.tools.JavaCompiler.CompilationTask;
 
 import org.apache.avro.AvroTestUtil;
 import org.apache.avro.Protocol;
 import org.apache.avro.Schema;
 import org.apache.avro.Schema.Field;
 import org.apache.avro.Schema.Type;
+import org.apache.avro.TestAnnotation;
 import org.apache.avro.TestProtocolParsing;
 import org.apache.avro.TestSchema;
-import org.apache.avro.TestAnnotation;
+import org.apache.avro.compiler.specific.SpecificCompiler.OutputFile;
 import org.apache.avro.generic.GenericData.StringType;
-
+import org.apache.avro.test.Kind;
+import org.apache.avro.test.MD5;
 import org.apache.avro.test.Simple;
 import org.apache.avro.test.TestRecord;
-import org.apache.avro.test.MD5;
-import org.apache.avro.test.Kind;
-
-import org.apache.avro.compiler.specific.SpecificCompiler.OutputFile;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TestSpecificCompiler {
+  private static final Logger LOG = LoggerFactory.getLogger(TestSpecificCompiler.class);
+
   static final String PROTOCOL = "" +
         "{ \"protocol\": \"default\",\n" +
         "  \"types\":\n" +
@@ -104,6 +108,19 @@ public class TestSpecificCompiler {
     assertEquals("goto$", SpecificCompiler.mangle("goto"));
   }
 
+  /**
+   * Tests whether a text string contains a specified regular expression.
+   *
+   * @param text Input text string to test the content of.
+   * @param regex Regular expression to search for.
+   * @return whether the regular expression is found in the given text.
+   */
+  private static boolean containsRegex(String text, String regex) {
+    final Pattern pattern = Pattern.compile(regex, Pattern.MULTILINE);
+    final Matcher matcher = pattern.matcher(text);
+    return matcher.find();
+  }
+
   @Test
   public void testManglingForProtocols() throws IOException {
     String protocolDef = PROTOCOL;
@@ -113,13 +130,16 @@ public class TestSpecificCompiler {
     String errType = i.next().contents;
     String protocol = i.next().contents;
 
-    assertTrue(errType.contains("public class finally$ extends org.apache.avro.specific.SpecificExceptionBase"));
+    LOG.debug("Java source generated from protocol:\n{}", errType);
+    assertTrue(containsRegex(errType,
+        "public\\s+class\\s+finally\\$"
+        + "\\s+extends\\s+org.apache.avro.specific.SpecificExceptionBase"));
     assertTrue(errType.contains("public boolean catch$;"));
 
     assertTrue(protocol.contains("java.lang.CharSequence goto$(java.lang.CharSequence break$)"));
     assertTrue(protocol.contains("public interface default$"));
     assertTrue(protocol.contains("throws org.apache.avro.AvroRemoteException, finally$"));
-    
+
     assertCompilesWithJavaCompiler(c);
 
   }
@@ -142,9 +162,9 @@ public class TestSpecificCompiler {
     String contents = c.iterator().next().contents;
 
     assertTrue(contents.contains("public java.lang.CharSequence package$;"));
-    assertTrue(contents.contains("class volatile$ extends"));
+    assertTrue(containsRegex(contents, "class\\s+volatile\\$\\s+extends"));
     assertTrue(contents.contains("volatile$ short$;"));
-    
+
     assertCompilesWithJavaCompiler(c);
   }
 

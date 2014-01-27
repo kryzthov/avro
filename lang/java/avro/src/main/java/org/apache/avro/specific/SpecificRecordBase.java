@@ -28,16 +28,19 @@ public abstract class SpecificRecordBase
   public abstract Object get(int field);
   public abstract void put(int field, Object value);
 
+  /** {@inheritDoc} */
   @Override
   public void put(String fieldName, Object value) {
     put(getSchema().getField(fieldName).pos(), value);
   }
 
+  /** {@inheritDoc} */
   @Override
   public Object get(String fieldName) {
     return get(getSchema().getField(fieldName).pos());
   }
 
+  /** {@inheritDoc} */
   @Override
   public boolean equals(Object that) {
     if (that == this) return true;                        // identical object
@@ -45,17 +48,20 @@ public abstract class SpecificRecordBase
     if (this.getClass() != that.getClass()) return false; // not same schema
     return SpecificData.get().compare(this, that, this.getSchema(), true) == 0;
   }
-    
+
+  /** {@inheritDoc} */
   @Override
   public int hashCode() {
     return SpecificData.get().hashCode(this, this.getSchema());
   }
 
+  /** {@inheritDoc} */
   @Override
   public int compareTo(SpecificRecord that) {
     return SpecificData.get().compare(this, that, this.getSchema());
   }
 
+  /** {@inheritDoc} */
   @Override
   public String toString() {
     return SpecificData.get().toString(this);

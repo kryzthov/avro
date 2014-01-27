@@ -17,28 +17,33 @@
  */
 package org.apache.avro.generic;
 
-/** Interface for mutable records accessed by field index.*/
-public interface IndexedRecord extends ImmutableIndexedRecord {
-  /**
-   * Return the value of a field given its position in the schema.
-   *
-   * <p> This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumWriter} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to read.
-   * @return the value of the field with the specified index.
-   */
-  @Override
-  Object get(int fieldIndex);
+
+/** Interface for builder of records whose fields are accessed by field index. */
+public interface IIndexedRecordBuilder<T extends IIndexedRecordBuilder<?>>
+    extends IndexedRecord {
 
   /**
-   * Set the value of a field given its position in the schema.
+   * Sets the value of a field.
    *
-   * <p>This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumReader} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to set.
-   * @param value New value of the field.
+   * @param fieldIndex the field to set.
+   * @param value the value to set.
+   * @return this builder.
    */
-  void put(int fieldIndex, Object value);
+  T set(int fieldIndex, Object value);
+
+  /**
+   * Checks whether a field has been set.
+   *
+   * @param fieldIndex the position of the field to check.
+   * @return whether the specified field is set or not.
+   */
+  boolean has(int fieldIndex);
+
+  /**
+   * Clears the value of the given field.
+   *
+   * @param fieldIndex the position of the field to clear.
+   * @return this builder.
+   */
+  T clear(int fieldIndex);
 }

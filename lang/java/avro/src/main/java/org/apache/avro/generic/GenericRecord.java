@@ -17,11 +17,20 @@
  */
 package org.apache.avro.generic;
 
-/** A generic instance of a record schema.  Fields are accessible by name as
- * well as by index. */
-public interface GenericRecord extends IndexedRecord {
-  /** Set the value of a field given its name. */
-  void put(String key, Object v);
-  /** Return the value of a field given its name. */
-  Object get(String key);
+/** Interface for mutable records whose fields are accessed by name. */
+public interface GenericRecord extends IndexedRecord, ImmutableGenericRecord {
+  /**
+   * Set the value of a field given its name.
+   *
+   * @param fieldName Name of the field to set.
+   * @param value New value of the field.
+   */
+  void put(String fieldName, Object value);
+
+  /**
+   * Return the value of a field given its name.
+   *
+   * @param fieldName Name of the field to read.
+   */
+  Object get(String fieldName);
 }

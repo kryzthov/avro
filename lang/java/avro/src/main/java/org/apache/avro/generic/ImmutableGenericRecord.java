@@ -17,28 +17,12 @@
  */
 package org.apache.avro.generic;
 
-/** Interface for mutable records accessed by field index.*/
-public interface IndexedRecord extends ImmutableIndexedRecord {
+/** Interface for immutable records whose fields are accessed by name. */
+public interface ImmutableGenericRecord extends ImmutableIndexedRecord {
   /**
-   * Return the value of a field given its position in the schema.
+   * Return the value of a field given its name.
    *
-   * <p> This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumWriter} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to read.
-   * @return the value of the field with the specified index.
+   * @param fieldName Name of the field to read.
    */
-  @Override
-  Object get(int fieldIndex);
-
-  /**
-   * Set the value of a field given its position in the schema.
-   *
-   * <p>This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumReader} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to set.
-   * @param value New value of the field.
-   */
-  void put(int fieldIndex, Object value);
+  Object get(String fieldName);
 }

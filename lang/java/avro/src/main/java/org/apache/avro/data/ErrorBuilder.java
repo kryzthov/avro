@@ -17,31 +17,33 @@
  */
 package org.apache.avro.data;
 
+import org.apache.avro.generic.IGenericRecordBuilder;
+
 /** Interface for error builders */
-public interface ErrorBuilder<T> extends RecordBuilder<T> {
-  
+public interface ErrorBuilder<T, U extends ErrorBuilder<?, ?>>
+    extends RecordBuilder<T>, IGenericRecordBuilder<U> {
+
   /** Gets the value */
   Object getValue();
-  
+
   /** Sets the value */
-  ErrorBuilder<T> setValue(Object value);
-  
+  ErrorBuilder<T, U> setValue(Object value);
+
   /** Checks whether the value has been set */
   boolean hasValue();
-  
+
   /** Clears the value */
-  ErrorBuilder<T> clearValue();
-  
+  ErrorBuilder<T, U> clearValue();
+
   /** Gets the error cause */
   Throwable getCause();
-  
+
   /** Sets the error cause */
-  ErrorBuilder<T> setCause(Throwable cause);
-  
+  ErrorBuilder<T, U> setCause(Throwable cause);
+
   /** Checks whether the cause has been set */
   boolean hasCause();
-  
-  /** Clears the cause */
-  ErrorBuilder<T> clearCause();
 
+  /** Clears the cause */
+  ErrorBuilder<T, U> clearCause();
 }

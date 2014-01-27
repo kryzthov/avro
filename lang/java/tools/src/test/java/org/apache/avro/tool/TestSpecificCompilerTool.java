@@ -17,20 +17,23 @@
  */
 package org.apache.avro.tool;
 
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
 
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Verifies that the SpecificCompilerTool generates Java source properly
  */
 public class TestSpecificCompilerTool {
+  private static final Logger LOG = LoggerFactory.getLogger(TestSpecificCompilerTool.class);
 
   // where test input/expected output comes from
   private static final File TEST_DIR =
@@ -135,9 +138,18 @@ public class TestSpecificCompilerTool {
    * See http://download.oracle.com/javase/6/docs/api/javax/tools/JavaCompiler.html
    */
   private static void assertFileMatch(File expected, File found) throws IOException {
-    Assert.assertEquals("Found file: " + found +
-      " does not match expected file: " + expected,
-      readFile(expected), readFile(found));
+    final String expectedText = readFile(expected);
+    final String actualText = readFile(found);
+    if (!actualText.equals(expectedText)) {
+      LOG.error("Generated content mismatch between expected file {} and actual file {}",
+          expected, found);
+      LOG.error("Expected content:\n{}", expectedText);
+      LOG.error("Actual content:\n{}", actualText);
+
+      Assert.fail(String.format(
+          "Generated content mismatch between expected file %s vs actual file %s",
+          expected, found));
+    }
   }
 
   /**

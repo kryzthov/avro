@@ -29,7 +29,8 @@ import org.apache.avro.generic.IndexedRecord;
 
 /** Abstract base class for RecordBuilder implementations.  Not thread-safe. */
 public abstract class RecordBuilderBase<T extends IndexedRecord> 
-  implements RecordBuilder<T> {
+    implements RecordBuilder<T>, IndexedRecord {
+
   private static final Field[] EMPTY_FIELDS = new Field[0];
   private final Schema schema;
   private final Field[] fields;
@@ -135,6 +136,7 @@ public abstract class RecordBuilderBase<T extends IndexedRecord>
     return data.deepCopy(field.schema(), data.getDefaultValue(field));
   }
 
+  /** {@inheritDoc} */
   @Override
   public int hashCode() {
     final int prime = 31;
@@ -144,6 +146,7 @@ public abstract class RecordBuilderBase<T extends IndexedRecord>
     return result;
   }
 
+  /** {@inheritDoc} */
   @Override
   public boolean equals(Object obj) {
     if (this == obj)
@@ -163,4 +166,67 @@ public abstract class RecordBuilderBase<T extends IndexedRecord>
       return false;
     return true;
   }
+
+  /** {@inheritDoc} */
+  @Override
+  public Schema getSchema() {
+    return schema;
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public void put(String fieldName, Object value) {
+    put(getSchema().getField(fieldName).pos(), value);
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public Object get(String fieldName) {
+    return get(getSchema().getField(fieldName).pos());
+  }
+
+  /**
+   * Gets the value of a field.
+   *
+   * @param field Descriptor of the field to get.
+   * @return the value of the given field, or null if not set.
+   */
+  public Object get(Field field) {
+    return get(field.pos());
+  }
+
+  /**
+   * Checks whether a field has been set.
+   * @param fieldName the name of the field to check.
+   * @return true if the given field is non-null; false otherwise.
+   */
+  public boolean has(String fieldName) {
+    return has(schema().getField(fieldName));
+  }
+
+  /**
+   * Checks whether a field has been set.
+   * @param field the field to check.
+   * @return true if the given field is non-null; false otherwise.
+   */
+  public boolean has(Field field) {
+    return has(field.pos());
+  }
+
+  /**
+   * Checks whether a field has been set.
+   * @param pos the position of the field to check.
+   * @return true if the given field is non-null; false otherwise.
+   */
+  public boolean has(int pos) {
+    return fieldSetFlags()[pos];
+  }
+
+  /** {@inheritDoc} */
+  @Override
+  public abstract void put(int fieldIndex, Object value);
+
+  /** {@inheritDoc} */
+  @Override
+  public abstract Object get(int fieldIndex);
 }

@@ -17,28 +17,33 @@
  */
 package org.apache.avro.generic;
 
-/** Interface for mutable records accessed by field index.*/
-public interface IndexedRecord extends ImmutableIndexedRecord {
-  /**
-   * Return the value of a field given its position in the schema.
-   *
-   * <p> This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumWriter} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to read.
-   * @return the value of the field with the specified index.
-   */
-  @Override
-  Object get(int fieldIndex);
+
+/** Interface for builders of records whose fields are accessed by name. */
+public interface IGenericRecordBuilder<T extends IGenericRecordBuilder<?>>
+    extends IIndexedRecordBuilder<T>, GenericRecord {
 
   /**
-   * Set the value of a field given its position in the schema.
+   * Sets the value of a field.
    *
-   * <p>This method is not meant to be called by user code,
-   * but only by {@link org.apache.avro.io.DatumReader} implementations. </p>
-   *
-   * @param fieldIndex Index of the field to set.
-   * @param value New value of the field.
+   * @param fieldName Name of the field to set.
+   * @param value the value to set.
+   * @return a reference to the RecordBuilder.
    */
-  void put(int fieldIndex, Object value);
+  T set(String fieldName, Object value);
+
+  /**
+   * Checks whether a field has been set.
+   *
+   * @param fieldName Name of the field to check.
+   * @return true if the given field is non-null; false otherwise.
+   */
+  boolean has(String fieldName);
+
+  /**
+   * Clears the value of the given field.
+   *
+   * @param fieldName Name of the field to clear.
+   * @return a reference to the RecordBuilder.
+   */
+  T clear(String fieldName);
 }
