@@ -30,11 +30,11 @@ MAIL_PROTOCOL_JSON = """\
 
  "types": [
      {"name": "Message", "type": "record",
-      "fields": [
-          {"name": "to",   "type": "string"},
-          {"name": "from", "type": "string"},
-          {"name": "body", "type": "string"}
-      ]
+            "fields": [
+                    {"name": "to",   "type": "string"},
+                    {"name": "from", "type": "string"},
+                    {"name": "body", "type": "string"}
+            ]
      }
  ],
 
@@ -54,19 +54,20 @@ MAIL_PROTOCOL = protocol.Parse(MAIL_PROTOCOL_JSON)
 SERVER_ADDRESS = ('localhost', 9090)
 
 class MailResponder(ipc.Responder):
-  def __init__(self):
-    ipc.Responder.__init__(self, MAIL_PROTOCOL)
+    def __init__(self):
+        ipc.Responder.__init__(self, MAIL_PROTOCOL)
 
-  def invoke(self, message, request):
-    if message.name == 'send':
-      request_content = request['message']
-      response = "Sent message to %(to)s from %(from)s with body %(body)s" % \
+    def invoke(self, message, request):
+        if message.name == 'send':
+            request_content = request['message']
+            response = "Sent message to %(to)s from %(from)s with body %(body)s" % \
                  request_content
-      return response
-    elif message.name == 'replay':
-      return 'replay'
+            return response
+        elif message.name == 'replay':
+            return 'replay'
 
 if __name__ == '__main__':
-  root = server.Site(txipc.AvroResponderResource(MailResponder()))
-  reactor.listenTCP(9090, root)
-  reactor.run()
+    root = server.Site(txipc.AvroResponderResource(MailResponder()))
+    reactor.listenTCP(9090, root)
+    reactor.run()
+
