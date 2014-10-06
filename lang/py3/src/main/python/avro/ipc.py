@@ -26,6 +26,7 @@ import io
 import logging
 import os
 import socketserver
+import traceback
 
 from avro import io as avro_io
 from avro import protocol
@@ -163,14 +164,17 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
             self._remote_hash = local_hash
             self._remote_protocol = self._local_protocol
 
+        # HandshakeRequest:
         request_datum = {
             'clientHash': local_hash,
+            'clientProtocol': None,
             'serverHash': self._remote_hash,
+            'meta': None,
         }
         if self._send_protocol:
             request_datum['clientProtocol'] = str(self._local_protocol)
 
-        logging.info('Sending handshake request: %s', request_datum)
+        logging.debug('Sending handshake request: %s', request_datum)
         HANDSHAKE_REQUESTOR_WRITER.write(request_datum, encoder)
 
     def _write_call_request(self, message_name, request_datum, encoder):
@@ -194,7 +198,7 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
         self._write_request(message.request, request_datum, encoder)
 
     def _write_request(self, request_schema, request_datum, encoder):
-        logging.info('writing request: %s', request_datum)
+        logging.debug('Writing request: %s', request_datum)
         datum_writer = avro_io.DatumWriter(request_schema)
         datum_writer.write(request_datum, encoder)
 
@@ -209,7 +213,7 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
             schema.AvroException on ???
         """
         handshake_response = HANDSHAKE_REQUESTOR_READER.read(decoder)
-        logging.info('Processing handshake response: %s', handshake_response)
+        logging.debug('Processing handshake response: %s', handshake_response)
         match = handshake_response['match']
         if match == 'BOTH':
             # Both client and server protocol hashes match:
@@ -363,7 +367,7 @@ class Responder(object, metaclass=abc.ABCMeta):
             writer_schema = remote_message.request
             reader_schema = local_message.request
             request = self._read_request(writer_schema, reader_schema, buffer_decoder)
-            logging.info('Processing request: %r', request)
+            logging.debug('Processing request: %r', request)
 
             # perform server logic
             try:
@@ -382,12 +386,17 @@ class Responder(object, metaclass=abc.ABCMeta):
             else:
                 writer_schema = local_message.errors
                 self._write_error(writer_schema, error, buffer_encoder)
+
         except schema.AvroException as exn:
+            logging.error("Error while encoding response:\n%s", traceback.format_exc())
+
+            # FIXME: We may already have written the error flag
             error = AvroRemoteException(str(exn))
-            buffer_encoder = avro_io.BinaryEncoder(io.StringIO())
+            buffer_encoder = avro_io.BinaryEncoder(io.BytesIO())
             META_WRITER.write(response_metadata, buffer_encoder)
             buffer_encoder.write_boolean(True)
             self._write_error(SYSTEM_ERROR_SCHEMA, error, buffer_encoder)
+
         return buffer_writer.getvalue()
 
     def _process_handshake(self, decoder, encoder):
@@ -400,7 +409,7 @@ class Responder(object, metaclass=abc.ABCMeta):
             The requested Protocol.
         """
         handshake_request = HANDSHAKE_RESPONDER_READER.read(decoder)
-        logging.info('Processing handshake request: %s', handshake_request)
+        logging.debug('Processing handshake request: %s', handshake_request)
 
         # determine the remote protocol
         client_hash = handshake_request.get('clientHash')
@@ -413,23 +422,26 @@ class Responder(object, metaclass=abc.ABCMeta):
         # evaluate remote's guess of the local protocol
         server_hash = handshake_request.get('serverHash')
 
-        handshake_response = {}
-        if self._local_hash == server_hash:
-            if remote_protocol is None:
-                handshake_response['match'] = 'NONE'
-            else:
-                handshake_response['match'] = 'BOTH'
+        if remote_protocol is None:
+            match = "NONE"
+        elif self._local_hash == server_hash:
+            match = 'BOTH'
         else:
-            if remote_protocol is None:
-                handshake_response['match'] = 'NONE'
-            else:
-                handshake_response['match'] = 'CLIENT'
+            match = 'CLIENT'
 
-        if handshake_response['match'] != 'BOTH':
+        # HandshakeResponse:
+        handshake_response = {
+            'match': match,
+            'serverProtocol': None,
+            'serverHash': None,
+            'meta': None,
+        }
+
+        if match != 'BOTH':
             handshake_response['serverProtocol'] = str(self.local_protocol)
             handshake_response['serverHash'] = self._local_hash
 
-        logging.info('Handshake response: %s', handshake_response)
+        logging.debug('Handshake response: %s', handshake_response)
         HANDSHAKE_RESPONDER_WRITER.write(handshake_response, encoder)
         return remote_protocol
 
@@ -642,9 +654,9 @@ def _make_handler_class(responder):
         def do_POST(self):
             reader = FramedReader(self.rfile)
             call_request = reader.read()
-            logging.info('Serialized request: %r', call_request)
+            logging.debug('Serialized request: %r', call_request)
             call_response = responder.respond(call_request)
-            logging.info('Serialized response: %r', call_response)
+            logging.debug('Serialized response: %r', call_response)
 
             self.send_response(200)
             self.send_header('Content-type', AVRO_RPC_MIME)
@@ -653,7 +665,11 @@ def _make_handler_class(responder):
             framed_writer = FramedWriter(self.wfile)
             framed_writer.write(call_response)
             self.wfile.flush()
-            logging.info('Response sent')
+            logging.debug('Response sent (flushed)')
+
+        def log_request(self, *args, **kwargs):
+            """Disable HTTP logging."""
+            pass
 
     return AvroHTTPRequestHandler
 
@@ -677,7 +693,7 @@ class AvroIpcHttpServer(MultiThreadedHTTPServer):
             port: TCP port the server listens on, eg. 8000.
             responder: Responder implementation to handle RPCs.
         """
-        super(AvroIpcHttpServer, self).__init__(
+        super().__init__(
             server_address=(interface, port),
             RequestHandlerClass=_make_handler_class(responder),
         )

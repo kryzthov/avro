@@ -118,7 +118,7 @@ class TestIPC(unittest.TestCase):
         self._server.server_close()
         self._server = None
 
-    def testEchoService(self):
+    def test_echo_service(self):
         """Tests client-side of the Echo service."""
         self.start_echo_server()
         try:

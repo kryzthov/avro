@@ -188,22 +188,83 @@ def check_skip_number(number_type):
 # ------------------------------------------------------------------------------
 
 
+class TestCheckSchema(unittest.TestCase):
+    def test_null(self):
+        schema_null = schema.parse('"null"')
+        avro_io.check_schema(datum=None, schema=schema_null)
+        try:
+            avro_io.check_schema(datum=1, schema=schema_null)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+
+    def test_int(self):
+        schema_int = schema.parse('"int"')
+        avro_io.check_schema(datum=1, schema=schema_int)
+        try:
+            avro_io.check_schema(datum=1<<33, schema=schema_int)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+        try:
+            avro_io.check_schema(datum="bad", schema=schema_int)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+
+    def test_array(self):
+        schema_array_int = schema.parse('{"type": "array", "items": "int"}')
+        avro_io.check_schema(datum=[1], schema=schema_array_int)
+        avro_io.check_schema(datum=[1, 2, 3], schema=schema_array_int)
+        try:
+            avro_io.check_schema(datum=[1, 2, 3, 1<<33], schema=schema_array_int)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+        try:
+            avro_io.check_schema(datum=["bad"], schema=schema_array_int)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+
+    def test_record(self):
+        schema_record = schema.parse("""
+            {
+              "type": "record",
+              "name": "Test",
+              "fields": [{"name": "f", "type": "long"}]
+            }
+        """)
+        avro_io.check_schema(datum={"f": 1}, schema=schema_record)
+        try:
+            avro_io.check_schema(datum=[], schema=schema_record)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+        try:
+            avro_io.check_schema(datum={}, schema=schema_record)
+            self.fail("Should have failed")
+        except schema.AvroException as exn:
+            pass
+
+
+
 class TestIO(unittest.TestCase):
     #
     # BASIC FUNCTIONALITY
     #
 
-    def testValidate(self):
+    def test_validate(self):
         passed = 0
         for example_schema, datum in SCHEMAS_TO_VALIDATE:
             logging.debug('Schema: %r', example_schema)
             logging.debug('Datum: %r', datum)
-            validated = avro_io.Validate(schema.parse(example_schema), datum)
+            validated = avro_io.validate(schema.parse(example_schema), datum)
             logging.debug('Valid: %s', validated)
             if validated: passed += 1
         self.assertEqual(passed, len(SCHEMAS_TO_VALIDATE))
 
-    def testRoundTrip(self):
+    def test_round_trip(self):
         correct = 0
         for example_schema, datum in SCHEMAS_TO_VALIDATE:
             logging.debug('Schema: %s', example_schema)
@@ -221,19 +282,19 @@ class TestIO(unittest.TestCase):
     # BINARY ENCODING OF INT AND LONG
     #
 
-    def testBinaryIntEncoding(self):
+    def test_binary_int_encoding(self):
         correct = check_binary_encoding('int')
         self.assertEqual(correct, len(BINARY_ENCODINGS))
 
-    def testBinaryLongEncoding(self):
+    def test_binary_long_encoding(self):
         correct = check_binary_encoding('long')
         self.assertEqual(correct, len(BINARY_ENCODINGS))
 
-    def testSkipInt(self):
+    def test_skip_int(self):
         correct = check_skip_number('int')
         self.assertEqual(correct, len(BINARY_ENCODINGS))
 
-    def testSkipLong(self):
+    def test_skip_long(self):
         correct = check_skip_number('long')
         self.assertEqual(correct, len(BINARY_ENCODINGS))
 
@@ -241,7 +302,7 @@ class TestIO(unittest.TestCase):
     # SCHEMA RESOLUTION
     #
 
-    def testSchemaPromotion(self):
+    def test_schema_promotion(self):
         # note that checking writer_schema.type in read_data
         # allows us to handle promotion correctly
         promotable_schemas = ['"int"', '"long"', '"float"', '"double"']
@@ -258,7 +319,7 @@ class TestIO(unittest.TestCase):
                 if datum_read != datum_to_write: incorrect += 1
         self.assertEqual(incorrect, 0)
 
-    def testUnknownSymbol(self):
+    def test_unknown_symbol(self):
         writer_schema = schema.parse("""\
             {"type": "enum", "name": "Test",
        "symbols": ["FOO", "BAR"]}""")
@@ -274,7 +335,7 @@ class TestIO(unittest.TestCase):
         datum_reader = avro_io.DatumReader(writer_schema, reader_schema)
         self.assertRaises(avro_io.SchemaResolutionException, datum_reader.read, decoder)
 
-    def testDefaultValue(self):
+    def test_default_value(self):
         writer_schema = LONG_RECORD_SCHEMA
         datum_to_write = LONG_RECORD_DATUM
 
@@ -292,7 +353,7 @@ class TestIO(unittest.TestCase):
             if datum_to_read == datum_read: correct += 1
         self.assertEqual(correct, len(DEFAULT_VALUE_EXAMPLES))
 
-    def testNoDefaultValue(self):
+    def test_no_default_value(self):
         writer_schema = LONG_RECORD_SCHEMA
         datum_to_write = LONG_RECORD_DATUM
 
@@ -306,7 +367,7 @@ class TestIO(unittest.TestCase):
         datum_reader = avro_io.DatumReader(writer_schema, reader_schema)
         self.assertRaises(avro_io.SchemaResolutionException, datum_reader.read, decoder)
 
-    def testProjection(self):
+    def test_projection(self):
         writer_schema = LONG_RECORD_SCHEMA
         datum_to_write = LONG_RECORD_DATUM
 
@@ -321,7 +382,7 @@ class TestIO(unittest.TestCase):
         logging.debug('Datum Read: %s', datum_read)
         self.assertEqual(datum_to_read, datum_read)
 
-    def testFieldOrder(self):
+    def test_field_order(self):
         writer_schema = LONG_RECORD_SCHEMA
         datum_to_write = LONG_RECORD_DATUM
 
@@ -336,14 +397,17 @@ class TestIO(unittest.TestCase):
         logging.debug('Datum Read: %s', datum_read)
         self.assertEqual(datum_to_read, datum_read)
 
-    def testTypeException(self):
+    def test_type_exception(self):
         writer_schema = schema.parse("""\
-            {"type": "record", "name": "Test",
-       "fields": [{"name": "F", "type": "int"},
-                                    {"name": "E", "type": "int"}]}""")
+            {
+              "type": "record",
+              "name": "Test",
+              "fields": [{"name": "F", "type": "int"},
+                         {"name": "E", "type": "int"}]
+            }
+        """)
         datum_to_write = {'E': 5, 'F': 'Bad'}
-        self.assertRaises(
-                avro_io.AvroTypeException, write_datum, datum_to_write, writer_schema)
+        self.assertRaises(avro_io.AvroTypeException, write_datum, datum_to_write, writer_schema)
 
 
 if __name__ == '__main__':

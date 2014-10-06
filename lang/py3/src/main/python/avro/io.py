@@ -41,6 +41,7 @@ following mapping:
 """
 
 import binascii
+import collections
 import json
 import logging
 import struct
@@ -49,7 +50,7 @@ import sys
 from avro import schema
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
 # Constants
 
 
@@ -65,33 +66,30 @@ STRUCT_DOUBLE = struct.Struct('!d')  # big-endian double
 STRUCT_CRC32 = struct.Struct('>I')   # big-endian unsigned int
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
 # Exceptions
 
 
 class AvroTypeException(schema.AvroException):
     """Raised when datum is not an example of schema."""
-    def __init__(self, expected_schema, datum):
-        pretty_expected = json.dumps(json.loads(str(expected_schema)), indent=2)
-        fail_msg = "The datum %s is not an example of the schema %s" \
-                   % (datum, pretty_expected)
-        schema.AvroException.__init__(self, fail_msg)
+    pass
 
 
 class SchemaResolutionException(schema.AvroException):
     def __init__(self, fail_msg, writer_schema=None, reader_schema=None):
         pretty_writers = json.dumps(json.loads(str(writer_schema)), indent=2)
         pretty_readers = json.dumps(json.loads(str(reader_schema)), indent=2)
-        if writer_schema: fail_msg += "\nWriter's Schema: %s" % pretty_writers
-        if reader_schema: fail_msg += "\nReader's Schema: %s" % pretty_readers
+        if writer_schema:
+            fail_msg += "\nWriter's Schema: %s" % pretty_writers
+        if reader_schema:
+            fail_msg += "\nReader's Schema: %s" % pretty_readers
         schema.AvroException.__init__(self, fail_msg)
 
 
-# ------------------------------------------------------------------------------
-# Validate
+# --------------------------------------------------------------------------------------------------
 
 
-def Validate(expected_schema, datum):
+def validate(expected_schema, datum):
     """Determines if a python datum is an instance of a schema.
 
     Args:
@@ -100,6 +98,8 @@ def Validate(expected_schema, datum):
     Returns:
         True if the datum is an instance of the schema.
     """
+    logging.debug("Validating compatibility of datum %r with schema %r", datum, expected_schema)
+
     schema_type = expected_schema.type
     if schema_type == 'null':
         return datum is None
@@ -123,24 +123,123 @@ def Validate(expected_schema, datum):
         return datum in expected_schema.symbols
     elif schema_type == 'array':
         return (isinstance(datum, list)
-                and all(Validate(expected_schema.items, item) for item in datum))
+                and all(validate(expected_schema.items, item) for item in datum))
     elif schema_type == 'map':
         return (isinstance(datum, dict)
                 and all(isinstance(key, str) for key in datum.keys())
-                and all(Validate(expected_schema.values, value)
+                and all(validate(expected_schema.values, value)
                         for value in datum.values()))
     elif schema_type in ['union', 'error_union']:
-        return any(Validate(union_branch, datum)
+        return any(validate(union_branch, datum)
                    for union_branch in expected_schema.schemas)
     elif schema_type in ['record', 'error', 'request']:
         return (isinstance(datum, dict)
-                and all(Validate(field.type, datum.get(field.name))
+                and all(validate(field.type, datum.get(field.name))
                         for field in expected_schema.fields))
     else:
-        raise AvroTypeException('Unknown Avro schema type: %r' % schema_type)
+        raise AvroException('Internal error : unknown Avro schema type: %r' % schema_type)
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
+
+
+Undefined = collections.namedtuple(typename="Undefined", field_names=())
+UNDEFINED = Undefined()
+
+
+def check_schema(datum, schema):
+    """Checks the schema of a given datum.
+
+    Args:
+        datum: the datum to validate the schema of.
+        schema: the expected schema the datum must conform to.
+    Raises:
+        AvroTypeException: if the datum does not match the specified schema.
+    """
+
+    def check(path, datum, schema):
+        """Recursively check the datum."""
+        schema_type = schema.type
+        if schema_type == 'null':
+            if (datum is not None):
+                raise AvroTypeException("Expecting null at path %r, got %r" % (path, datum))
+        elif schema_type == 'boolean':
+            if not isinstance(datum, bool):
+                raise AvroTypeException("Expecting boolean at path %r, got %r" % (path, datum))
+        elif schema_type == 'string':
+            if not isinstance(datum, str):
+                raise AvroTypeException("Expecting string at path %r, got %r" % (path, datum))
+        elif schema_type == 'bytes':
+            if not isinstance(datum, bytes):
+                raise AvroTypeException("Expecting bytes at path %r, got %r" % (path, datum))
+        elif schema_type == 'int':
+            if not (isinstance(datum, int) and (INT_MIN_VALUE <= datum <= INT_MAX_VALUE)):
+                raise AvroTypeException("Expecting int at path %r, got %r" % (path, datum))
+        elif schema_type == 'long':
+            if not (isinstance(datum, int) and (LONG_MIN_VALUE <= datum <= LONG_MAX_VALUE)):
+                raise AvroTypeException("Expecting long at path %r, got %r" % (path, datum))
+        elif schema_type in ['float', 'double']:
+            if not (isinstance(datum, int) or isinstance(datum, float)):
+                raise AvroTypeException("Expecting float or double at path %r, got %r"
+                                        % (path, datum))
+        elif schema_type == 'fixed':
+            if not isinstance(datum, bytes) and (len(datum) == schema.size):
+                raise AvroTypeException("Expecting fixed(%d) at path %r, got %r"
+                                        % (schema.size, path, datum))
+        elif schema_type == 'enum':
+            if not (datum in schema.symbols):
+                raise AvroTypeException("Expecting enum %s at path %r, got %r"
+                                    % (schema.name, path, datum))
+        elif schema_type == 'array':
+            if not isinstance(datum, list):
+                raise AvroTypeException("Expecting array at path %r, got %r" % (path, datum))
+            for index, item in enumerate(datum):
+                check(path="%s[%d]" % (path, index), datum=item, schema=schema.items)
+
+        elif schema_type == 'map':
+            if not isinstance(datum, dict):
+                raise AvroTypeException("Expecting map at path %r, got %r" % (path, datum))
+
+            for key, value in datum.items():
+                if not isinstance(key, str):
+                    raise AvroTypeException("Expecting map keys to be strings at path %s got key %r"
+                                        % (path, key))
+                check(path="%s[%r]" % (path, key), datum=value, schema=schema.values)
+
+        elif schema_type in ['union', 'error_union']:
+            # TODO: Improve error reporting when looking for union matches:
+            for branch in schema.schemas:
+                try:
+                    check(path=path, datum=datum, schema=branch)
+                    # Match, exit successfully:
+                    return
+                except AvroTypeException as exn:
+                    # Union branch does not match, try next union branch if any:
+                    pass
+            raise AvroTypeException("No match for union at path %r with datum %r" % (path, datum))
+
+        elif schema_type in ['record', 'error', 'request']:
+            if not isinstance(datum, dict):
+                raise AvroTypeException("Expecting record/error/request at path %s, got %r"
+                                    % (path, datum))
+            for field in schema.fields:
+                field_value = datum.get(field.name, UNDEFINED)
+                if (field_value is UNDEFINED) and field.has_default:
+                    field_value = field.default
+
+                check(path="%s.%s" % (path, field.name), datum=field_value, schema=field.type)
+
+        else:
+            raise AvroException('Internal error : unknown Avro schema type: %r' % schema_type)
+
+    try:
+        check(path="datum", datum=datum, schema=schema)
+    except AvroTypeException as err:
+        raise AvroTypeException("Error validating datum %r with type %r: %s\n%s"
+                                % (datum, schema.fullname, schema, str(err)))
+
+
+# --------------------------------------------------------------------------------------------------
 # Decoder/Encoder
 
 
@@ -167,7 +266,8 @@ class BinaryDecoder(object):
         """
         assert (n >= 0), n
         input_bytes = self.reader.read(n)
-        assert (len(input_bytes) == n), input_bytes
+        assert (len(input_bytes) == n), \
+            ("Input mismatch: expected %d bytes, got %d (%r)" % (n, len(input_bytes), input_bytes))
         return input_bytes
 
     def read_null(self):
@@ -286,7 +386,7 @@ class BinaryDecoder(object):
         self.reader.seek(self.reader.tell() + n)
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
 
 
 class BinaryEncoder(object):
@@ -313,7 +413,7 @@ class BinaryEncoder(object):
         assert isinstance(datum, bytes), ('Expecting bytes, got %r' % datum)
         self.writer.write(datum)
 
-    def WriteByte(self, byte):
+    def write_byte(self, byte):
         self.writer.write(bytes((byte,)))
 
     def write_null(self, datum):
@@ -328,7 +428,7 @@ class BinaryEncoder(object):
         whose value is either 0 (false) or 1 (true).
         """
         # Python maps True to 1 and False to 0.
-        self.WriteByte(int(bool(datum)))
+        self.write_byte(int(bool(datum)))
 
     def write_int(self, datum):
         """
@@ -342,9 +442,9 @@ class BinaryEncoder(object):
         """
         datum = (datum << 1) ^ (datum >> 63)
         while (datum & ~0x7F) != 0:
-            self.WriteByte((datum & 0x7f) | 0x80)
+            self.write_byte((datum & 0x7f) | 0x80)
             datum >>= 7
-        self.WriteByte(datum)
+        self.write_byte(datum)
 
     def write_float(self, datum):
         """
@@ -353,10 +453,10 @@ class BinaryEncoder(object):
         Java's floatToIntBits and then encoded in little-endian format.
         """
         bits = STRUCT_INT.unpack(STRUCT_FLOAT.pack(datum))[0]
-        self.WriteByte((bits) & 0xFF)
-        self.WriteByte((bits >> 8) & 0xFF)
-        self.WriteByte((bits >> 16) & 0xFF)
-        self.WriteByte((bits >> 24) & 0xFF)
+        self.write_byte((bits) & 0xFF)
+        self.write_byte((bits >> 8) & 0xFF)
+        self.write_byte((bits >> 16) & 0xFF)
+        self.write_byte((bits >> 24) & 0xFF)
 
     def write_double(self, datum):
         """
@@ -365,14 +465,14 @@ class BinaryEncoder(object):
         Java's doubleToLongBits and then encoded in little-endian format.
         """
         bits = STRUCT_LONG.unpack(STRUCT_DOUBLE.pack(datum))[0]
-        self.WriteByte((bits) & 0xFF)
-        self.WriteByte((bits >> 8) & 0xFF)
-        self.WriteByte((bits >> 16) & 0xFF)
-        self.WriteByte((bits >> 24) & 0xFF)
-        self.WriteByte((bits >> 32) & 0xFF)
-        self.WriteByte((bits >> 40) & 0xFF)
-        self.WriteByte((bits >> 48) & 0xFF)
-        self.WriteByte((bits >> 56) & 0xFF)
+        self.write_byte((bits) & 0xFF)
+        self.write_byte((bits >> 8) & 0xFF)
+        self.write_byte((bits >> 16) & 0xFF)
+        self.write_byte((bits >> 24) & 0xFF)
+        self.write_byte((bits >> 32) & 0xFF)
+        self.write_byte((bits >> 40) & 0xFF)
+        self.write_byte((bits >> 48) & 0xFF)
+        self.write_byte((bits >> 56) & 0xFF)
 
     def write_bytes(self, datum):
         """
@@ -396,7 +496,7 @@ class BinaryEncoder(object):
         self.write(STRUCT_CRC32.pack(binascii.crc32(bytes) & 0xffffffff));
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
 # DatumReader/Writer
 
 
@@ -782,7 +882,7 @@ class DatumReader(object):
             raise schema.AvroException(fail_msg)
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------------
 
 
 class DatumWriter(object):
@@ -797,8 +897,7 @@ class DatumWriter(object):
 
     def write(self, datum, encoder):
         # validate datum
-        if not Validate(self.writer_schema, datum):
-            raise AvroTypeException(self.writer_schema, datum)
+        check_schema(datum=datum, schema=self.writer_schema)
 
         self.write_data(self.writer_schema, datum, encoder)
 
@@ -889,25 +988,26 @@ class DatumWriter(object):
         encoder.write_long(0)
 
     def write_union(self, writer_schema, datum, encoder):
-        """
-        A union is encoded by first writing a long value indicating
+        """A union is encoded by first writing a long value indicating
         the zero-based position within the union of the schema of its value.
         The value is then encoded per the indicated schema within the union.
         """
         # resolve union
-        index_of_schema = -1
-        for i, candidate_schema in enumerate(writer_schema.schemas):
-            if Validate(candidate_schema, datum):
-                index_of_schema = i
-        if index_of_schema < 0: raise AvroTypeException(writer_schema, datum)
+        branch_index = -1
+        for index, candidate_schema in enumerate(writer_schema.schemas):
+            if validate(candidate_schema, datum):
+                branch_index = index
+                break
+        if branch_index == -1:
+            raise AvroTypeException("Datum %r does not match any type in union %r"
+                                    % (datum, writer_schema))
 
         # write data
-        encoder.write_long(index_of_schema)
-        self.write_data(writer_schema.schemas[index_of_schema], datum, encoder)
+        encoder.write_long(branch_index)
+        self.write_data(writer_schema.schemas[branch_index], datum, encoder)
 
     def write_record(self, writer_schema, datum, encoder):
-        """
-        A record is encoded by encoding the values of its fields
+        """A record is encoded by encoding the values of its fields
         in the order that they are declared. In other words, a record
         is encoded as just the concatenation of the encodings of its fields.
         Field values are encoded per their schema.
