@@ -25,6 +25,7 @@ import http.server
 import io
 import logging
 import os
+import pkgutil
 import socketserver
 import traceback
 
@@ -35,16 +36,17 @@ from avro import schema
 # ------------------------------------------------------------------------------
 # Constants
 
-def LoadResource(name):
-    dir_path = os.path.dirname(__file__)
+def load_resource(name):
+    loader = pkgutil.get_loader("avro")
+    dir_path = os.path.dirname(loader.path)
     rsrc_path = os.path.join(dir_path, name)
     with open(rsrc_path, 'r') as f:
         return f.read()
 
 
 # Handshake schema is pulled in during build
-HANDSHAKE_REQUEST_SCHEMA_JSON = LoadResource('HandshakeRequest.avsc')
-HANDSHAKE_RESPONSE_SCHEMA_JSON = LoadResource('HandshakeResponse.avsc')
+HANDSHAKE_REQUEST_SCHEMA_JSON = load_resource('HandshakeRequest.avsc')
+HANDSHAKE_RESPONSE_SCHEMA_JSON = load_resource('HandshakeResponse.avsc')
 
 HANDSHAKE_REQUEST_SCHEMA = schema.parse(HANDSHAKE_REQUEST_SCHEMA_JSON)
 HANDSHAKE_RESPONSE_SCHEMA = schema.parse(HANDSHAKE_RESPONSE_SCHEMA_JSON)
@@ -178,11 +180,17 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
         HANDSHAKE_REQUESTOR_WRITER.write(request_datum, encoder)
 
     def _write_call_request(self, message_name, request_datum, encoder):
-        """The format of a call request is:
-         - request metadata, a map with values of type bytes
-         - the message name, an Avro string, followed by
-         - the message parameters. Parameters are serialized according to
-           the message's request declaration.
+        """Encodes a call request.
+
+        The format of a call request is:
+         - request metadata, as a map with values of type bytes;
+         - the message name, as an Avro string;
+         - the message parameters, as specified in the protocol message definition.
+
+        Args:
+            message_name: Name of the protocol message to encode a request for.
+            request_datum: Request parameters.
+            encoder: Encoder to encode request with.
         """
         # request metadata (not yet implemented)
         request_metadata = {}
@@ -332,6 +340,11 @@ class Responder(object, metaclass=abc.ABCMeta):
 
         Args:
             call_request: Serialized procedure call request.
+                The call request includes:
+                 - handshake prefix;
+                 - call request metadata (map: string -> bytes);
+                 - protocol message name;
+                 - encoded request for the protocol message.
         Returns:
             Serialized procedure call response.
         Raises:
@@ -342,6 +355,8 @@ class Responder(object, metaclass=abc.ABCMeta):
         buffer_writer = io.BytesIO()
         buffer_encoder = avro_io.BinaryEncoder(buffer_writer)
         error = None
+
+        # Map: string -> bytes
         response_metadata = {}
 
         try:
@@ -638,7 +653,12 @@ class HTTPTransceiver(Transceiver):
         req_body_buffer.write(message)
         req_body = bio.getvalue()
 
-        self._conn.request(req_method, self._req_resource, req_body, req_headers)
+        self._conn.request(
+            method=req_method,
+            url=self._req_resource,
+            body=req_body,
+            headers=req_headers,
+        )
 
     def close(self):
         self._conn.close()
