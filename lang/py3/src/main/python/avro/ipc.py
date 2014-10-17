@@ -40,13 +40,13 @@ def load_resource(name):
     loader = pkgutil.get_loader("avro")
     dir_path = os.path.dirname(loader.path)
     rsrc_path = os.path.join(dir_path, name)
-    with open(rsrc_path, 'r') as f:
+    with open(rsrc_path, "r") as f:
         return f.read()
 
 
 # Handshake schema is pulled in during build
-HANDSHAKE_REQUEST_SCHEMA_JSON = load_resource('HandshakeRequest.avsc')
-HANDSHAKE_RESPONSE_SCHEMA_JSON = load_resource('HandshakeResponse.avsc')
+HANDSHAKE_REQUEST_SCHEMA_JSON = load_resource("HandshakeRequest.avsc")
+HANDSHAKE_RESPONSE_SCHEMA_JSON = load_resource("HandshakeResponse.avsc")
 
 HANDSHAKE_REQUEST_SCHEMA = schema.parse(HANDSHAKE_REQUEST_SCHEMA_JSON)
 HANDSHAKE_RESPONSE_SCHEMA = schema.parse(HANDSHAKE_RESPONSE_SCHEMA_JSON)
@@ -56,13 +56,13 @@ HANDSHAKE_REQUESTOR_READER = avro_io.DatumReader(HANDSHAKE_RESPONSE_SCHEMA)
 HANDSHAKE_RESPONDER_WRITER = avro_io.DatumWriter(HANDSHAKE_RESPONSE_SCHEMA)
 HANDSHAKE_RESPONDER_READER = avro_io.DatumReader(HANDSHAKE_REQUEST_SCHEMA)
 
-META_SCHEMA = schema.parse('{"type": "map", "values": "bytes"}')
+META_SCHEMA = schema.parse("""{"type": "map", "values": "bytes"}""")
 META_WRITER = avro_io.DatumWriter(META_SCHEMA)
 META_READER = avro_io.DatumReader(META_SCHEMA)
 
-SYSTEM_ERROR_SCHEMA = schema.parse('["string"]')
+SYSTEM_ERROR_SCHEMA = schema.parse("""["string"]""")
 
-AVRO_RPC_MIME = 'avro/binary'
+AVRO_RPC_MIME = "avro/binary"
 
 # protocol cache
 
@@ -129,7 +129,7 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
         Returns:
             ???
         """
-        raise Error('Abstract method')
+        raise Error("Abstract method")
 
     def request(self, message_name, request_datum):
         """Writes a request message and reads a response or error message.
@@ -168,15 +168,15 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
 
         # HandshakeRequest:
         request_datum = {
-            'clientHash': local_hash,
-            'clientProtocol': None,
-            'serverHash': self._remote_hash,
-            'meta': None,
+            "clientHash": local_hash,
+            "clientProtocol": None,
+            "serverHash": self._remote_hash,
+            "meta": None,
         }
         if self._send_protocol:
-            request_datum['clientProtocol'] = str(self._local_protocol)
+            request_datum["clientProtocol"] = str(self._local_protocol)
 
-        logging.debug('Sending handshake request: %s', request_datum)
+        logging.debug("Sending handshake request: %s", request_datum)
         HANDSHAKE_REQUESTOR_WRITER.write(request_datum, encoder)
 
     def _write_call_request(self, message_name, request_datum, encoder):
@@ -199,14 +199,14 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
         # Identify message to send:
         message = self.local_protocol.message_map.get(message_name)
         if message is None:
-            raise schema.AvroException('Unknown message: %s' % message_name)
+            raise schema.AvroException("Unknown message: %s" % message_name)
         encoder.write_utf8(message.name)
 
         # message parameters
         self._write_request(message.request, request_datum, encoder)
 
     def _write_request(self, request_schema, request_datum, encoder):
-        logging.debug('Writing request: %s', request_datum)
+        logging.debug("Writing request: %s", request_datum)
         datum_writer = avro_io.DatumWriter(request_schema)
         datum_writer.write(request_datum, encoder)
 
@@ -221,28 +221,28 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
             schema.AvroException on ???
         """
         handshake_response = HANDSHAKE_REQUESTOR_READER.read(decoder)
-        logging.debug('Processing handshake response: %s', handshake_response)
-        match = handshake_response['match']
-        if match == 'BOTH':
+        logging.debug("Processing handshake response: %s", handshake_response)
+        match = handshake_response["match"]
+        if match == "BOTH":
             # Both client and server protocol hashes match:
             self._send_protocol = False
             return True
 
-        elif match == 'CLIENT':
-            # Client's side hash mismatch:
-            self._remote_protocol = protocol.parse(handshake_response['serverProtocol'])
-            self._remote_hash = handshake_response['serverHash']
+        elif match == "CLIENT":
+            # Client side hash mismatch:
+            self._remote_protocol = protocol.parse(handshake_response["serverProtocol"])
+            self._remote_hash = handshake_response["serverHash"]
             self._send_protocol = False
             return True
 
-        elif match == 'NONE':
+        elif match == "NONE":
             # Neither client nor server match:
-            self._remote_protocol = protocol.parse(handshake_response['serverProtocol'])
-            self._remote_hash = handshake_response['serverHash']
+            self._remote_protocol = protocol.parse(handshake_response["serverProtocol"])
+            self._remote_hash = handshake_response["serverHash"]
             self._send_protocol = True
             return False
         else:
-            raise schema.AvroException('handshake_response.match=%r' % match)
+            raise schema.AvroException("handshake_response.match=%r" % match)
 
     def _read_call_response(self, message_name, decoder):
         """Reads and processes a method call response.
@@ -269,12 +269,12 @@ class BaseRequestor(object, metaclass=abc.ABCMeta):
         # remote response schema
         remote_message_schema = self._remote_protocol.message_map.get(message_name)
         if remote_message_schema is None:
-            raise schema.AvroException('Unknown remote message: %s' % message_name)
+            raise schema.AvroException("Unknown remote message: %s" % message_name)
 
         # local response schema
         local_message_schema = self._local_protocol.message_map.get(message_name)
         if local_message_schema is None:
-            raise schema.AvroException('Unknown local message: %s' % message_name)
+            raise schema.AvroException("Unknown local message: %s" % message_name)
 
         # error flag
         if not decoder.read_boolean():
@@ -373,16 +373,16 @@ class Responder(object, metaclass=abc.ABCMeta):
             # schema resolution (one fine day)
             remote_message = remote_protocol.message_map.get(remote_message_name)
             if remote_message is None:
-                fail_msg = 'Unknown remote message: %s' % remote_message_name
+                fail_msg = "Unknown remote message: %s" % remote_message_name
                 raise schema.AvroException(fail_msg)
             local_message = self.local_protocol.message_map.get(remote_message_name)
             if local_message is None:
-                fail_msg = 'Unknown local message: %s' % remote_message_name
+                fail_msg = "Unknown local message: %s" % remote_message_name
                 raise schema.AvroException(fail_msg)
             writer_schema = remote_message.request
             reader_schema = local_message.request
             request = self._read_request(writer_schema, reader_schema, buffer_decoder)
-            logging.debug('Processing request: %r', request)
+            logging.debug("Processing request: %r", request)
 
             # perform server logic
             try:
@@ -424,39 +424,39 @@ class Responder(object, metaclass=abc.ABCMeta):
             The requested Protocol.
         """
         handshake_request = HANDSHAKE_RESPONDER_READER.read(decoder)
-        logging.debug('Processing handshake request: %s', handshake_request)
+        logging.debug("Processing handshake request: %s", handshake_request)
 
         # determine the remote protocol
-        client_hash = handshake_request.get('clientHash')
-        client_protocol = handshake_request.get('clientProtocol')
+        client_hash = handshake_request.get("clientHash")
+        client_protocol = handshake_request.get("clientProtocol")
         remote_protocol = self.get_protocol_cache(client_hash)
         if remote_protocol is None and client_protocol is not None:
             remote_protocol = protocol.parse(client_protocol)
             self.set_protocol_cache(client_hash, remote_protocol)
 
         # evaluate remote's guess of the local protocol
-        server_hash = handshake_request.get('serverHash')
+        server_hash = handshake_request.get("serverHash")
 
         if remote_protocol is None:
             match = "NONE"
         elif self._local_hash == server_hash:
-            match = 'BOTH'
+            match = "BOTH"
         else:
-            match = 'CLIENT'
+            match = "CLIENT"
 
         # HandshakeResponse:
         handshake_response = {
-            'match': match,
-            'serverProtocol': None,
-            'serverHash': None,
-            'meta': None,
+            "match": match,
+            "serverProtocol": None,
+            "serverHash": None,
+            "meta": None,
         }
 
-        if match != 'BOTH':
-            handshake_response['serverProtocol'] = str(self.local_protocol)
-            handshake_response['serverHash'] = self._local_hash
+        if match != "BOTH":
+            handshake_response["serverProtocol"] = str(self.local_protocol)
+            handshake_response["serverHash"] = self._local_hash
 
-        logging.debug('Handshake response: %s', handshake_response)
+        logging.debug("Handshake response: %s", handshake_response)
         HANDSHAKE_RESPONDER_WRITER.write(handshake_response, encoder)
         return remote_protocol
 
@@ -472,7 +472,7 @@ class Responder(object, metaclass=abc.ABCMeta):
         Raises:
             ???
         """
-        raise Error('abtract method')
+        raise Error("abtract method")
 
     def _read_request(self, writer_schema, reader_schema, decoder):
         datum_reader = avro_io.DatumReader(writer_schema, reader_schema)
@@ -523,7 +523,7 @@ class FramedReader(object):
             data_bytes = self._reader.read(remaining)
             if len(data_bytes) == 0:
                 raise ConnectionClosedException(
-                    'FramedReader: expecting %d more bytes in frame of size %d, got 0.'
+                    "FramedReader: expecting %d more bytes in frame of size %d, got 0."
                     % (remaining, frame_size))
             message.write(data_bytes)
             remaining -= len(data_bytes)
@@ -532,7 +532,7 @@ class FramedReader(object):
     def _read_int32(self):
         encoded = self._reader.read(UINT32_BE.size)
         if len(encoded) != UINT32_BE.size:
-            raise ConnectionClosedException('Invalid header: %r' % encoded)
+            raise ConnectionClosedException("Invalid header: %r" % encoded)
         return UINT32_BE.unpack(encoded)[0]
 
 
@@ -572,6 +572,8 @@ class FramedWriter(object):
 
 
 class Transceiver(object, metaclass=abc.ABCMeta):
+    """Interface for transceivers (send/receive channels)."""
+
     @abc.abstractproperty
     def remote_name(self):
         pass
@@ -617,25 +619,32 @@ class Transceiver(object, metaclass=abc.ABCMeta):
         pass
 
 
-class HTTPTransceiver(Transceiver):
-    """HTTP-based transceiver implementation."""
+# --------------------------------------------------------------------------------------------------
 
-    def __init__(self, host, port, req_resource='/'):
+
+class HTTPTransceiver(Transceiver):
+    """HTTP-based transceiver implementation.
+
+    One full HTTP connection is opened (and closed) per request/response.
+    No pipelining or multiplexing allowed.
+    """
+
+    def __init__(self, host, port, req_resource="/"):
         """Initializes a new HTTP transceiver.
 
         Args:
             host: Name or IP address of the remote host to interact with.
             port: Port the remote server is listening on.
-            req_resource: Optional HTTP resource path to use, '/' by default.
+            req_resource: Optional HTTP resource path to use, "/" by default.
         """
         self._req_resource = req_resource
         self._conn = http.client.HTTPConnection(host, port)
-        self._conn.connect()
-        self._remote_name = self._conn.sock.getsockname()
 
     @property
     def remote_name(self):
-        return self._remote_name
+        if self._conn.sock is not None:
+            return self._conn.sock.getsockname()
+        return None
 
     def read_message(self):
         response = self._conn.getresponse()
@@ -645,8 +654,8 @@ class HTTPTransceiver(Transceiver):
         return framed_message
 
     def write_message(self, message):
-        req_method = 'POST'
-        req_headers = {'Content-Type': AVRO_RPC_MIME}
+        req_method = "POST"
+        req_headers = {"Content-Type": AVRO_RPC_MIME}
 
         bio = io.BytesIO()
         req_body_buffer = FramedWriter(bio)
@@ -674,18 +683,18 @@ def _make_handler_class(responder):
         def do_POST(self):
             reader = FramedReader(self.rfile)
             call_request = reader.read()
-            logging.debug('Serialized request: %r', call_request)
+            logging.debug("Serialized request: %r", call_request)
             call_response = responder.respond(call_request)
-            logging.debug('Serialized response: %r', call_response)
+            logging.debug("Serialized response: %r", call_response)
 
             self.send_response(200)
-            self.send_header('Content-type', AVRO_RPC_MIME)
+            self.send_header("Content-type", AVRO_RPC_MIME)
             self.end_headers()
 
             framed_writer = FramedWriter(self.wfile)
             framed_writer.write(call_response)
             self.wfile.flush()
-            logging.debug('Response sent (flushed)')
+            logging.debug("Response sent (flushed)")
 
         def log_request(self, *args, **kwargs):
             """Disable HTTP logging."""
@@ -709,7 +718,7 @@ class AvroIpcHttpServer(MultiThreadedHTTPServer):
         """Initializes a new Avro IPC server.
 
         Args:
-            interface: Interface the server listens on, eg. 'localhost' or '0.0.0.0'.
+            interface: Interface the server listens on, eg. "localhost" or "0.0.0.0".
             port: TCP port the server listens on, eg. 8000.
             responder: Responder implementation to handle RPCs.
         """
@@ -719,5 +728,5 @@ class AvroIpcHttpServer(MultiThreadedHTTPServer):
         )
 
 
-if __name__ == '__main__':
-    raise Exception('Not a standalone module')
+if __name__ == "__main__":
+    raise Exception("Not a standalone module")
