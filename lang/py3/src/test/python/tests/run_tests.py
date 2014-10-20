@@ -46,6 +46,7 @@ import os
 import sys
 import unittest
 
+from tests.test_avro_tcp import *
 from tests.test_datafile import *
 from tests.test_datafile_interop import *
 from tests.test_io import *
@@ -57,8 +58,9 @@ from tests.test_script import *
 
 def setup_logging():
     log_level = int(os.environ.get('PYTHON_LOG_LEVEL', logging.INFO))
-    log_formatter = \
-        logging.Formatter('%(asctime)s %(levelname)s %(filename)s:%(lineno)s : %(message)s')
+    log_formatter = logging.Formatter(
+        "%(asctime)s %(threadName)s@%(thread)d %(levelname)s %(filename)s:%(lineno)s : "
+        "%(message)s")
 
     logging.root.handlers = list()  # list.clear() only exists in python 3.3+
     logging.root.setLevel(log_level)
@@ -73,4 +75,3 @@ setup_logging()
 
 if __name__ == '__main__':
     unittest.main()
-

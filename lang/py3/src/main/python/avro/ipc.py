@@ -487,8 +487,40 @@ class Responder(object, metaclass=abc.ABCMeta):
         datum_writer.write(str(error_exception), encoder)
 
 
+class AvroResponder(Responder):
+    """Generic Avro responder that delegates to an implementation using reflection."""
+
+    def __init__(self, protocol, impl=None):
+        super().__init__(local_protocol=protocol)
+        self._impl = impl or self
+
+    def invoke(self, message, request, context=None):
+        """Processes an incoming message."""
+        logging.debug("Processing message %r (%s) with request %r", message.name, message, request)
+        try:
+            message_handler = getattr(self._impl, message.name)
+            return message_handler(
+                context=context,
+                request=request,
+            )
+        except:
+            logging.error("Error processing message %r:\n%s", message.name, traceback.format_exc())
+            raise
+
+
 # ------------------------------------------------------------------------------
 # Framed message
+
+
+def read_uint32(reader):
+    encoded = reader.read(UINT32_BE.size)
+    if len(encoded) != UINT32_BE.size:
+        raise ConnectionClosedException("Invalid header: %r" % encoded)
+    return UINT32_BE.unpack(encoded)[0]
+
+
+def write_uint32(writer, uint32):
+    writer.write(UINT32_BE.pack(uint32))
 
 
 class FramedReader(object):
@@ -530,10 +562,7 @@ class FramedReader(object):
         return frame_size
 
     def _read_int32(self):
-        encoded = self._reader.read(UINT32_BE.size)
-        if len(encoded) != UINT32_BE.size:
-            raise ConnectionClosedException("Invalid header: %r" % encoded)
-        return UINT32_BE.unpack(encoded)[0]
+        return read_uint32(self._reader)
 
 
 class FramedWriter(object):
@@ -564,7 +593,7 @@ class FramedWriter(object):
         self._writer.write(chunk)
 
     def _write_uint32(self, uint32):
-        self._writer.write(UINT32_BE.pack(uint32))
+        write_uint32(self._writer, uint32)
 
 
 # ------------------------------------------------------------------------------

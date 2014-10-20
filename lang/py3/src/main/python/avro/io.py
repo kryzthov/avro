@@ -246,8 +246,10 @@ def check_schema(datum, schema):
 class BinaryDecoder(object):
     """Read leaf values."""
     def __init__(self, reader):
-        """
-        reader is a Python object on which we can call read, seek, and tell.
+        """Initializes a new Avro binary decoder.
+
+        Args:
+            reader: Python object on which we can call read, seek, and tell.
         """
         self._reader = reader
 
@@ -256,43 +258,35 @@ class BinaryDecoder(object):
         """Reports the reader used by this decoder."""
         return self._reader
 
-    def read(self, n):
+    def read(self, nbytes):
         """Read n bytes.
 
         Args:
-            n: Number of bytes to read.
+            nbytes: Number of bytes to read.
         Returns:
             The next n bytes from the input.
         """
-        assert (n >= 0), n
-        input_bytes = self.reader.read(n)
-        assert (len(input_bytes) == n), \
-            ("Input mismatch: expected %d bytes, got %d (%r)" % (n, len(input_bytes), input_bytes))
+        assert (nbytes >= 0), ("Invalid number of bytes: %r" % nbytes)
+        input_bytes = self.reader.read(nbytes)
+        assert (len(input_bytes) == nbytes), \
+            ("Input mismatch: expected %d bytes, got %d (%r)"
+             % (nbytes, len(input_bytes), input_bytes))
         return input_bytes
 
     def read_null(self):
-        """
-        null is written as zero bytes
-        """
+        """Null values are not represented in the underlying binary encoding."""
         return None
 
     def read_boolean(self):
-        """
-        a boolean is written as a single byte
-        whose value is either 0 (false) or 1 (true).
-        """
+        """Boolean values are written as a single byte: 0 for false; 1 for true."""
         return ord(self.read(1)) == 1
 
     def read_int(self):
-        """
-        int and long values are written using variable-length, zig-zag coding.
-        """
+        """Integer and long values are written using variable-length, zig-zag coding."""
         return self.read_long()
 
     def read_long(self):
-        """
-        int and long values are written using variable-length, zig-zag coding.
-        """
+        """Integer and long values are written using variable-length, zig-zag coding."""
         b = ord(self.read(1))
         n = b & 0x7F
         shift = 7
@@ -304,8 +298,8 @@ class BinaryDecoder(object):
         return datum
 
     def read_float(self):
-        """
-        A float is written as 4 bytes.
+        """Float values are written as 4 bytes.
+
         The float is converted into a 32-bit integer using a method equivalent to
         Java's floatToIntBits and then encoded in little-endian format.
         """
@@ -316,8 +310,8 @@ class BinaryDecoder(object):
         return STRUCT_FLOAT.unpack(STRUCT_INT.pack(bits))[0]
 
     def read_double(self):
-        """
-        A double is written as 8 bytes.
+        """Double values are written as 8 bytes.
+
         The double is converted into a 64-bit integer using a method equivalent to
         Java's doubleToLongBits and then encoded in little-endian format.
         """
@@ -332,18 +326,13 @@ class BinaryDecoder(object):
         return STRUCT_DOUBLE.unpack(STRUCT_LONG.pack(bits))[0]
 
     def read_bytes(self):
-        """
-        Bytes are encoded as a long followed by that many bytes of data.
-        """
+        """Arbitrary byte arrays are encoded as a long followed by that many bytes of data."""
         nbytes = self.read_long()
-        assert (nbytes >= 0), nbytes
+        assert ((nbytes >= 0) and (nbytes < (1<<32))), ("Invalid byte array size: %r" % nbytes)
         return self.read(nbytes)
 
     def read_utf8(self):
-        """
-        A string is encoded as a long followed by
-        that many bytes of UTF-8 encoded character data.
-        """
+        """Strings are encoded as arbitrary byte arrays, but decoded as UTF-8."""
         input_bytes = self.read_bytes()
         try:
             return input_bytes.decode('utf-8')
@@ -410,16 +399,14 @@ class BinaryEncoder(object):
         Args:
             datum: Byte array, as a Python bytes.
         """
-        assert isinstance(datum, bytes), ('Expecting bytes, got %r' % datum)
+        assert isinstance(datum, bytes), ("Expecting bytes, got %r" % datum)
         self.writer.write(datum)
 
     def write_byte(self, byte):
         self.writer.write(bytes((byte,)))
 
     def write_null(self, datum):
-        """
-        null is written as zero bytes
-        """
+        """Null values are not represented in the binary encoding."""
         pass
 
     def write_boolean(self, datum):
@@ -431,15 +418,11 @@ class BinaryEncoder(object):
         self.write_byte(int(bool(datum)))
 
     def write_int(self, datum):
-        """
-        int and long values are written using variable-length, zig-zag coding.
-        """
+        """Integer and long values are written using variable-length, zig-zag coding."""
         self.write_long(datum);
 
     def write_long(self, datum):
-        """
-        int and long values are written using variable-length, zig-zag coding.
-        """
+        """Integer and long values are written using variable-length, zig-zag coding."""
         datum = (datum << 1) ^ (datum >> 63)
         while (datum & ~0x7F) != 0:
             self.write_byte((datum & 0x7f) | 0x80)
@@ -447,8 +430,8 @@ class BinaryEncoder(object):
         self.write_byte(datum)
 
     def write_float(self, datum):
-        """
-        A float is written as 4 bytes.
+        """Float values are encoded using 4 bytes.
+
         The float is converted into a 32-bit integer using a method equivalent to
         Java's floatToIntBits and then encoded in little-endian format.
         """
@@ -459,8 +442,8 @@ class BinaryEncoder(object):
         self.write_byte((bits >> 24) & 0xFF)
 
     def write_double(self, datum):
-        """
-        A double is written as 8 bytes.
+        """Double values are written using 8 bytes.
+
         The double is converted into a 64-bit integer using a method equivalent to
         Java's doubleToLongBits and then encoded in little-endian format.
         """
@@ -475,24 +458,20 @@ class BinaryEncoder(object):
         self.write_byte((bits >> 56) & 0xFF)
 
     def write_bytes(self, datum):
-        """
-        Bytes are encoded as a long followed by that many bytes of data.
-        """
+        """Arbitrary byte arrays are encoded as a long followed by that many bytes of data."""
         self.write_long(len(datum))
         self.write(datum)
 
     def write_utf8(self, datum):
-        """
-        A string is encoded as a long followed by
-        that many bytes of UTF-8 encoded character data.
+        """Strings are encoded as a long followed by that many bytes of UTF-8 encoded code points.
+
+        Strings are UTF-8 encoded.
         """
         datum = datum.encode("utf-8")
         self.write_bytes(datum)
 
     def write_crc32(self, bytes):
-        """
-        A 4-byte, big-endian CRC32 checksum
-        """
+        """A 4-byte, big-endian CRC32 checksum."""
         self.write(STRUCT_CRC32.pack(binascii.crc32(bytes) & 0xffffffff));
 
 

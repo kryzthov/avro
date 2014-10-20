@@ -24,6 +24,7 @@ import threading
 import time
 import unittest
 
+from avro import avro_tcp
 from avro import ipc
 from avro import protocol
 from avro import schema
@@ -77,18 +78,31 @@ ECHO_PROTOCOL_JSON = """
 ECHO_PROTOCOL = protocol.parse(ECHO_PROTOCOL_JSON)
 
 
-class EchoResponder(ipc.Responder):
+class EchoResponder(ipc.AvroResponder):
     def __init__(self):
-        super().__init__(local_protocol=ECHO_PROTOCOL)
+        super().__init__(protocol=ECHO_PROTOCOL)
 
-    def invoke(self, message, request):
-        logging.info('Message: %s', message)
-        logging.info('Request: %s', request)
-        ping = request['ping']
-        return {'timestamp': now_ms(), 'ping': ping}
+    def ping(self, context, request):
+        """Implements the ping protocol message.
+
+        Args:
+            context: RPC context.
+            request: Ping request.
+        Returns:
+            Pong Avro record.
+        """
+        ping = request["ping"]
+        time.sleep(1.0)
+        return {  # Pong
+            'timestamp': now_ms(),
+            'ping': ping,
+        }
 
 
-class TestIPC(unittest.TestCase):
+# --------------------------------------------------------------------------------------------------
+
+
+class TestAvroTcp(unittest.TestCase):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,9 +110,8 @@ class TestIPC(unittest.TestCase):
         self._server = None
 
     def start_echo_server(self):
-        self._server = ipc.AvroIpcHttpServer(
-            interface='localhost',
-            port=0,
+        self._server = avro_tcp.AvroTcpServer(
+            address=("localhost", 0),
             responder=EchoResponder(),
         )
 
@@ -123,25 +136,42 @@ class TestIPC(unittest.TestCase):
         self.start_echo_server()
         try:
             (server_host, server_port) = self._server.server_address
-
-            transceiver = ipc.HTTPTransceiver(host=server_host, port=server_port)
-            requestor = ipc.Requestor(
-                local_protocol=ECHO_PROTOCOL,
-                transceiver=transceiver,
+            client = avro_tcp.AvroTcpClient(
+                protocol=ECHO_PROTOCOL,
+                host=server_host,
+                port=server_port,
             )
-            response = requestor.request(
-                message_name='ping',
-                request_datum={'ping': {'timestamp': 31415, 'text': 'hello ping'}},
-            )
-            logging.info('Received echo response: %s', response)
+            client.open()
 
-            response = requestor.request(
-                message_name='ping',
-                request_datum={'ping': {'timestamp': 123456, 'text': 'hello again'}},
-            )
-            logging.info('Received echo response: %s', response)
+            try:
+                def ping_callback(response):
+                    logging.info("Received ping response: %r", response)
 
-            transceiver.close()
+                response = client.ping(
+                    request={'ping': {'timestamp': 31415, 'text': 'hello ping'}},
+                    callback=ping_callback,
+                )
+                logging.info('Received echo response: %s', response)
+
+                time.sleep(0.5)
+
+                response = client.ping(
+                    request={'ping': {'timestamp': 218456, 'text': 'hello bongbong'}},
+                    callback=ping_callback,
+                )
+                logging.info('Received echo response: %s', response)
+
+                time.sleep(3.0)
+            # response = requestor.request(
+            #     message_name='ping',
+            #     request_datum={'ping': {'timestamp': 123456, 'text': 'hello again'}},
+            # )
+            # logging.info('Received echo response: %s', response)
+
+
+
+            finally:
+                client.close()
 
         finally:
             self.stop_echo_server()
