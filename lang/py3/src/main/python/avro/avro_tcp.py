@@ -15,6 +15,9 @@ from avro import io as avro_io
 from avro import ipc
 
 
+# --------------------------------------------------------------------------------------------------
+
+
 class RequestContext(object):
     def __init__(self, request_id):
         self._request_id = request_id
@@ -22,6 +25,36 @@ class RequestContext(object):
     @property
     def request_id(self):
         return self._request_id
+
+
+AvroResponse = collections.namedtuple(
+    typename="AvroResponse",
+    field_names=(
+        "request_id",
+        "message",
+        "response_datum",
+    )
+)
+
+
+AvroRequest = collections.namedtuple(
+    typename="AvroRequest",
+    field_names=(
+        "message",
+        "request_datum",
+        "response_queue",
+        "callback",
+        "context",
+    )
+)
+
+
+AvroRequestContext = collections.namedtuple(
+    typename="AvroRequestContext",
+    field_names=(
+        "timeout",
+    )
+)
 
 
 # --------------------------------------------------------------------------------------------------
@@ -206,16 +239,6 @@ class AvroIpcTcpRequestHandler(socketserver.BaseRequestHandler):
         self._socket = None
 
 
-AvroResponse = collections.namedtuple(
-    typename="AvroResponse",
-    field_names=(
-        "request_id",
-        "message",
-        "response_datum",
-    )
-)
-
-
 # --------------------------------------------------------------------------------------------------
 
 
@@ -243,26 +266,6 @@ class AvroTcpServer(socketserver.ThreadingTCPServer):
 
 
 # --------------------------------------------------------------------------------------------------
-
-
-AvroRequest = collections.namedtuple(
-    typename="AvroRequest",
-    field_names=(
-        "message",
-        "request_datum",
-        "response_queue",
-        "callback",
-        "context",
-    )
-)
-
-
-AvroRequestContext = collections.namedtuple(
-    typename="AvroRequestContext",
-    field_names=(
-        "timeout",
-    )
-)
 
 
 class AvroTcpClient(object):
